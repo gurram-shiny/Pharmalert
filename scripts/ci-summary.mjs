@@ -23,15 +23,34 @@ const jsonRows = async (file, result) => {
   } catch { return { passed: 0, failed: 0 }; }
 };
 const gateCount = (result) => result === 'success' ? { passed: 1, failed: 0 } : result === 'failure' ? { passed: 0, failed: 1 } : { passed: 0, failed: 0 };
+const unitCounts = ['success', 'failure'].includes(env.UNIT_RESULT) ? tapCounts(await read('unit.tap')) : { passed: 0, failed: 0 };
+const backendCounts = ['success', 'failure'].includes(env.BACKEND_RESULT) ? tapCounts(await read('backend.tap')) : { passed: 0, failed: 0 };
+const seleniumCounts = await jsonRows('selenium.json', env.SELENIUM_RESULT);
+const appiumRows = await jsonRows('appium.json', env.APPIUM_RESULT);
+const baselineGateResults = [env.TYPECHECK_RESULT, env.DATASET_RESULT, env.WEB_BUILD_RESULT, env.BUNDLE_EXPORT_RESULT, env.SECURITY_RESULT, env.AUDIT_RESULT];
+const baselineGateCounts = baselineGateResults.reduce((sum, result) => {
+  const counts = gateCount(result);
+  if (result !== 'success' && result !== 'failure') counts.failed++;
+  return { passed: sum.passed + counts.passed, failed: sum.failed + counts.failed };
+}, { passed: 0, failed: 0 });
+const baselineCounts = {
+  passed: unitCounts.passed + backendCounts.passed + baselineGateCounts.passed,
+  failed: unitCounts.failed + backendCounts.failed + baselineGateCounts.failed,
+};
+const baselineStatus = [...baselineGateResults, env.UNIT_RESULT, env.BACKEND_RESULT].every((result) => result === 'success') ? 'success' : 'failure';
+const appiumGateResults = [env.ANDROID_BUILD_RESULT, env.APPIUM_INSTALL_RESULT, env.APPIUM_RESULT];
+const appiumGateCounts = appiumGateResults.reduce((sum, result) => {
+  const counts = gateCount(result);
+  if (result !== 'success' && result !== 'failure') counts.failed++;
+  return { passed: sum.passed + counts.passed, failed: sum.failed + counts.failed };
+}, { passed: 0, failed: 0 });
+const appiumCounts = { passed: appiumRows.passed + appiumGateCounts.passed, failed: appiumRows.failed + appiumGateCounts.failed };
+const appiumStatus = appiumGateResults.every((result) => result === 'success') ? 'success' : 'failure';
 const tests = [
-  ['Unit tests', ['success', 'failure'].includes(env.UNIT_RESULT) ? tapCounts(await read('unit.tap')) : { passed: 0, failed: 0 }, env.UNIT_RESULT],
-  ['Backend tests', ['success', 'failure'].includes(env.BACKEND_RESULT) ? tapCounts(await read('backend.tap')) : { passed: 0, failed: 0 }, env.BACKEND_RESULT],
-  ['Selenium', await jsonRows('selenium.json', env.SELENIUM_RESULT), env.SELENIUM_RESULT],
-  ['Appium', await jsonRows('appium.json', env.APPIUM_RESULT), env.APPIUM_RESULT],
-  ['Security source scan', gateCount(env.SECURITY_RESULT), env.SECURITY_RESULT],
-  ['Dependency audit', gateCount(env.AUDIT_RESULT), env.AUDIT_RESULT],
-  ['Dataset evidence validation', gateCount(env.DATASET_RESULT), env.DATASET_RESULT],
-  ['Performance thresholds', gateCount(env.PERFORMANCE_RESULT), env.PERFORMANCE_RESULT],
+  ['Selenium', seleniumCounts, env.SELENIUM_RESULT],
+  ['Appium', appiumCounts, appiumStatus],
+  ['Baseline + security/DevSecOps', baselineCounts, baselineStatus],
+  ['k6', gateCount(env.PERFORMANCE_RESULT), env.PERFORMANCE_RESULT],
 ];
 const gates = [
   ['TypeScript check', env.TYPECHECK_RESULT], ['Web frontend build', env.WEB_BUILD_RESULT],
