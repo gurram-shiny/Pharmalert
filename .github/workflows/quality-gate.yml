@@ -132,9 +132,12 @@ jobs:
         if: steps.android_build.outcome == 'success' && steps.appium_install.outcome == 'success'
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2.38.0
+        env:
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           api-level: 35
           arch: x86_64
+          emulator-boot-timeout: 900
           script: |
             npm run server > reports/evidence/appium-backend.log 2>&1 &
             backend_pid=$!
@@ -143,7 +146,11 @@ jobs:
             trap 'kill "$backend_pid" "$appium_pid" 2>/dev/null || true' EXIT
             timeout 90 bash -c 'until curl -fsS http://127.0.0.1:4723/status; do sleep 2; done'
             timeout 90 bash -c 'until curl -fsS http://127.0.0.1:8787/api/status; do sleep 2; done'
-            ANDROID_SERIAL=emulator-5554 PHARMALERT_TEST_OFFLINE=1 PHARMALERT_APK="$PWD/apps/app-frontend/android/app/build/outputs/apk/release/app-release.apk" npm run test:mobile
+            adb devices -l | tee reports/evidence/android-devices.log
+            android_serial="$(adb devices | awk '$2 == "device" && $1 ~ /^emulator-/ {print $1; exit}')"
+            if [[ -z "$android_serial" ]]; then echo 'No booted Android emulator is available to Appium.'; exit 1; fi
+            echo "Running Appium on $android_serial"
+            ANDROID_SERIAL="$android_serial" PHARMALERT_TEST_OFFLINE=1 PHARMALERT_APK="$PWD/apps/app-frontend/android/app/build/outputs/apk/release/app-release.apk" npm run test:mobile
 
       - name: Build test graphs and workflow summary
         if: always()

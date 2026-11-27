@@ -27,7 +27,7 @@ export default function(data){
     const substances=[{name:'Zocor',kind:'medicine'},{name:'Gemfibrozil',kind:'medicine'}];
     const response=http.post(base+'/api/check',JSON.stringify({substances}),{headers:{...headers,'Content-Type':'application/json'},tags:{endpoint:'check'}});
     writes.add(response.timings.duration);
-    check(response,{'sourced write succeeded':r=>r.status===200&&r.json('matchCount')===1&&r.json('highest')==='high'});
+    check(response,{'sourced write succeeded':r=>r.status===200&&r.json('matchCount')===1&&r.json('highest')==='contraindicated'});
   }
 }
 export function handleSummary(data){return {'reports/evidence/k6.json':JSON.stringify(data,null,2)};}

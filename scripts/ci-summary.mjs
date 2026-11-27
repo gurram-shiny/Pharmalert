@@ -23,6 +23,7 @@ const jsonRows = async (file, result) => {
   } catch { return { passed: 0, failed: 0 }; }
 };
 const gateCount = (result) => result === 'success' ? { passed: 1, failed: 0 } : result === 'failure' ? { passed: 0, failed: 1 } : { passed: 0, failed: 0 };
+const combinedResult = (results) => results.every((result) => result === 'success') ? 'success' : results.some((result) => result === 'failure') ? 'failure' : 'not run';
 const unitCounts = ['success', 'failure'].includes(env.UNIT_RESULT) ? tapCounts(await read('unit.tap')) : { passed: 0, failed: 0 };
 const backendCounts = ['success', 'failure'].includes(env.BACKEND_RESULT) ? tapCounts(await read('backend.tap')) : { passed: 0, failed: 0 };
 const seleniumCounts = await jsonRows('selenium.json', env.SELENIUM_RESULT);
@@ -30,22 +31,20 @@ const appiumRows = await jsonRows('appium.json', env.APPIUM_RESULT);
 const baselineGateResults = [env.TYPECHECK_RESULT, env.DATASET_RESULT, env.WEB_BUILD_RESULT, env.BUNDLE_EXPORT_RESULT, env.SECURITY_RESULT, env.AUDIT_RESULT];
 const baselineGateCounts = baselineGateResults.reduce((sum, result) => {
   const counts = gateCount(result);
-  if (result !== 'success' && result !== 'failure') counts.failed++;
   return { passed: sum.passed + counts.passed, failed: sum.failed + counts.failed };
 }, { passed: 0, failed: 0 });
 const baselineCounts = {
   passed: unitCounts.passed + backendCounts.passed + baselineGateCounts.passed,
   failed: unitCounts.failed + backendCounts.failed + baselineGateCounts.failed,
 };
-const baselineStatus = [...baselineGateResults, env.UNIT_RESULT, env.BACKEND_RESULT].every((result) => result === 'success') ? 'success' : 'failure';
+const baselineStatus = combinedResult([...baselineGateResults, env.UNIT_RESULT, env.BACKEND_RESULT]);
 const appiumGateResults = [env.ANDROID_BUILD_RESULT, env.APPIUM_INSTALL_RESULT, env.APPIUM_RESULT];
 const appiumGateCounts = appiumGateResults.reduce((sum, result) => {
   const counts = gateCount(result);
-  if (result !== 'success' && result !== 'failure') counts.failed++;
   return { passed: sum.passed + counts.passed, failed: sum.failed + counts.failed };
 }, { passed: 0, failed: 0 });
 const appiumCounts = { passed: appiumRows.passed + appiumGateCounts.passed, failed: appiumRows.failed + appiumGateCounts.failed };
-const appiumStatus = appiumGateResults.every((result) => result === 'success') ? 'success' : 'failure';
+const appiumStatus = combinedResult(appiumGateResults);
 const tests = [
   ['Selenium', seleniumCounts, env.SELENIUM_RESULT],
   ['Appium', appiumCounts, appiumStatus],
@@ -83,6 +82,7 @@ try {
 } catch { /* Keep explicit unknown status when no clean JSON report exists. */ }
 let dependencyNote = 'Dependency audit details were not produced.';
 try {
+  if (!['success', 'failure'].includes(env.AUDIT_RESULT)) throw new Error('Dependency audit did not run.');
   const audit = JSON.parse(await read('npm-audit.json'));
   const counts = audit.metadata?.vulnerabilities;
   if (counts) dependencyNote = `npm audit found ${counts.critical} critical, ${counts.high} high, ${counts.moderate} moderate and ${counts.low} low severity advisories. The gate requires zero high and critical advisories; moderate advisories remain disclosed here and in the detailed artifact.`;

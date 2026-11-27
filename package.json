@@ -27,7 +27,8 @@
     "typescript": "~5.9.3"
   },
   "optionalDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "^4.68.8"
+    "@rollup/rollup-linux-x64-gnu": "^4.68.8",
+    "lightningcss-linux-x64-gnu": "^1.33.0"
   },
   "overrides": {
     "postcss": "^8.5.33",
