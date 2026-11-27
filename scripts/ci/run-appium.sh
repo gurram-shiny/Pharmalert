@@ -6,8 +6,16 @@ npm run server > reports/evidence/appium-backend.log 2>&1 &
 backend_pid=$!
 appium > reports/evidence/appium-server.log 2>&1 &
 appium_pid=$!
+android_serial=""
 cleanup() {
+  status=$?
+  trap - EXIT
+  if [[ "$status" -ne 0 && -n "$android_serial" ]]; then
+    adb -s "$android_serial" logcat -d -v threadtime > reports/evidence/android-logcat.txt 2>&1 || true
+    adb -s "$android_serial" shell dumpsys activity activities > reports/evidence/android-activities.txt 2>&1 || true
+  fi
   kill "$backend_pid" "$appium_pid" 2>/dev/null || true
+  exit "$status"
 }
 trap cleanup EXIT
 

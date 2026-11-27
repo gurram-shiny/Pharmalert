@@ -7,8 +7,12 @@ import { Executor,HttpClient } from 'selenium-webdriver/http/index.js';
 import { mkdir,writeFile } from 'node:fs/promises';
 const apk=process.env.PHARMALERT_APK;
 if(!apk)throw new Error('Set PHARMALERT_APK to the absolute path of an Android test build.');
+const expectedPairCount=groups.reduce((total,group)=>total+group.pairs.length,0);
+if(expectedPairCount<300)throw new Error(`Appium matrix requires at least 300 interaction-pair cases; configured ${expectedPairCount}.`);
+const expectedCaseCount=expectedPairCount+(process.env.PHARMALERT_TEST_OFFLINE==='1'?6:5);
+console.log(`Appium planned cases: ${expectedCaseCount} (${expectedPairCount} saved-report pairs plus ${expectedCaseCount-expectedPairCount} native flows).`);
 const executor=new Executor(new HttpClient(process.env.APPIUM_URL ?? 'http://127.0.0.1:4723'));
-const driver=WebDriver.createSession(executor,{platformName:'Android','appium:automationName':'UiAutomator2','appium:app':apk,...(process.env.ANDROID_SERIAL?{'appium:udid':process.env.ANDROID_SERIAL,'appium:systemPort':Number(process.env.APPIUM_SYSTEM_PORT??8201)}:{}),'appium:androidInstallTimeout':300000,'appium:adbExecTimeout':120000,'appium:uiautomator2ServerInstallTimeout':300000});
+const driver=WebDriver.createSession(executor,{platformName:'Android','appium:automationName':'UiAutomator2','appium:app':apk,...(process.env.ANDROID_SERIAL?{'appium:udid':process.env.ANDROID_SERIAL,'appium:systemPort':Number(process.env.APPIUM_SYSTEM_PORT??8201)}:{}),'appium:androidInstallTimeout':300000,'appium:adbExecTimeout':120000,'appium:uiautomator2ServerInstallTimeout':300000,'appium:uiautomator2ServerLaunchTimeout':300000});
 const rows=[];
 let pairIndex=0;
 const email=randomUUID()+'@example.test';
@@ -26,7 +30,7 @@ async function scrollTo(name){
 }
 async function run(id,description,expected,check){
   try{await check();rows.push({id,description,expected,actual:expected,status:'PASS',timestamp:new Date().toISOString(),evidence:'tests/mobile/appium.mjs'});}
-  catch(error){rows.push({id,description,expected,actual:error.message.split('\n')[0],status:'FAIL',timestamp:new Date().toISOString(),evidence:'tests/mobile/appium.mjs'});throw error;}
+  catch(error){rows.push({id,description,expected,actual:error.message.split('\n')[0],status:'FAIL',timestamp:new Date().toISOString(),evidence:'tests/mobile/appium.mjs'});console.error(`${id} failed: ${error.message.split('\n')[0]}`);}
 }
 try{
   await driver.getSession();
@@ -109,7 +113,7 @@ try{
   if(process.env.PHARMALERT_TEST_OFFLINE==='1'){
     if(!/^emulator-\d+$/.test(process.env.ANDROID_SERIAL??''))throw Error('Offline test requires an explicitly selected emulator.');
     const adb=process.env.PHARMALERT_ADB??'adb';
-    const shell=(...args)=>execFileSync(adb,['-s',process.env.ANDROID_SERIAL,'shell',...args],{encoding:'utf8',timeout:10000});
+    const shell=(...args)=>execFileSync(adb,['-s',process.env.ANDROID_SERIAL,'shell',...args],{encoding:'utf8',timeout:30000});
     await run('MC03','Offline sign-out survives reopening','Sign-out clears the native session with no default network and survives relaunch.',async()=>{
       for(let i=0;i<80&&!(await driver.findElements(By.xpath('//*[@content-desc="Account"]'))).length;i++)await scroll('up');
       await (await label('Account')).click();
@@ -126,6 +130,9 @@ try{
       }finally{shell('cmd','connectivity','airplane-mode',previous?'enable':'disable');}
     });
   }
+  if(rows.length!==expectedCaseCount)throw new Error(`Appium executed ${rows.length} of ${expectedCaseCount} planned cases.`);
+  const failedCount=rows.filter(row=>row.status==='FAIL').length;
+  if(failedCount)throw new Error(`Appium completed ${rows.length} cases with ${failedCount} failure(s).`);
 } catch(error) {
   await mkdir('reports/evidence',{recursive:true});
   const source=await driver.getPageSource().catch(()=>null);
