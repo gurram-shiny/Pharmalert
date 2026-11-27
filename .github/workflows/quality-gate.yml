@@ -1,0 +1,188 @@
+name: PharmAlert full quality gate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-suite:
+    name: Unit, backend, web, Android, security and performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Java for Android
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Prepare run reports
+        run: |
+          rm -rf reports/evidence
+          mkdir -p reports/evidence
+
+      - name: TypeScript check
+        id: types
+        continue-on-error: true
+        run: npm run check
+
+      - name: Unit tests
+        id: unit
+        continue-on-error: true
+        shell: bash
+        run: node --experimental-strip-types --test --test-reporter=tap tests/unit/*.test.ts tests/unit/*.test.mjs > reports/evidence/unit.tap 2>&1
+
+      - name: Backend tests
+        id: backend
+        continue-on-error: true
+        run: node --test --test-reporter=tap tests/integration/backend.test.mjs > reports/evidence/backend.tap 2>&1
+
+      - name: Dataset source verification
+        id: dataset
+        continue-on-error: true
+        run: node datasets/validation/verify-source.ts > reports/evidence/dataset-validation.json 2>&1
+
+      - name: Build web and export Android bundle
+        id: build
+        continue-on-error: true
+        run: |
+          npm run build
+          npm exec -w @pharmalert/app-frontend -- expo export --platform android
+
+      - name: Selenium browser suite
+        id: selenium
+        continue-on-error: true
+        shell: bash
+        run: |
+          npm run server > reports/evidence/selenium-backend.log 2>&1 &
+          backend_pid=$!
+          npm run dev -w @pharmalert/web-frontend -- --host 127.0.0.1 > reports/evidence/selenium-web.log 2>&1 &
+          web_pid=$!
+          trap 'kill "$backend_pid" "$web_pid" 2>/dev/null || true' EXIT
+          timeout 90 bash -c 'until curl -fsS http://127.0.0.1:5173/api/status; do sleep 2; done'
+          npm run test:web
+
+      - name: Security source baseline
+        id: security
+        continue-on-error: true
+        run: node tests/security/check-source.mjs
+
+      - name: Dependency vulnerability audit
+        id: audit
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Performance suite
+        id: performance
+        continue-on-error: true
+        shell: bash
+        run: |
+          npm run server > reports/evidence/performance-backend.log 2>&1 &
+          backend_pid=$!
+          trap 'kill "$backend_pid" 2>/dev/null || true' EXIT
+          timeout 90 bash -c 'until curl -fsS http://127.0.0.1:8787/api/status; do sleep 2; done'
+          k6 run tests/performance/k6.js
+
+      - name: Prepare Android native project
+        id: prebuild
+        continue-on-error: true
+        run: npx expo prebuild --platform android --no-install
+        working-directory: apps/app-frontend
+
+      - name: Build Android test APK
+        id: android_build
+        continue-on-error: true
+        shell: bash
+        working-directory: apps/app-frontend/android
+        run: |
+          sed -i 's/<application /<application android:usesCleartextTraffic="true" /' app/src/main/AndroidManifest.xml
+          NODE_ENV=production EXPO_NO_METRO_WORKSPACE_ROOT=1 ./gradlew assembleRelease -PreactNativeArchitectures=x86_64
+
+      - name: Install Appium and Android driver
+        id: appium_install
+        continue-on-error: true
+        run: |
+          npm install --global appium
+          appium driver install uiautomator2
+
+      - name: Appium Android emulator suite
+        id: appium
+        if: steps.android_build.outcome == 'success' && steps.appium_install.outcome == 'success'
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          script: |
+            npm run server > reports/evidence/appium-backend.log 2>&1 &
+            backend_pid=$!
+            appium > reports/evidence/appium-server.log 2>&1 &
+            appium_pid=$!
+            trap 'kill "$backend_pid" "$appium_pid" 2>/dev/null || true' EXIT
+            timeout 90 bash -c 'until curl -fsS http://127.0.0.1:4723/status; do sleep 2; done'
+            timeout 90 bash -c 'until curl -fsS http://127.0.0.1:8787/api/status; do sleep 2; done'
+            ANDROID_SERIAL=emulator-5554 PHARMALERT_TEST_OFFLINE=1 PHARMALERT_APK="$PWD/apps/app-frontend/android/app/build/outputs/apk/release/app-release.apk" npm run test:mobile
+
+      - name: Build test graphs and workflow summary
+        if: always()
+        env:
+          TYPECHECK_RESULT: ${{ steps.types.outcome }}
+          UNIT_RESULT: ${{ steps.unit.outcome }}
+          BACKEND_RESULT: ${{ steps.backend.outcome }}
+          DATASET_RESULT: ${{ steps.dataset.outcome }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
+          SELENIUM_RESULT: ${{ steps.selenium.outcome }}
+          SECURITY_RESULT: ${{ steps.security.outcome }}
+          AUDIT_RESULT: ${{ steps.audit.outcome }}
+          PERFORMANCE_RESULT: ${{ steps.performance.outcome }}
+          PREBUILD_RESULT: ${{ steps.prebuild.outcome }}
+          ANDROID_BUILD_RESULT: ${{ steps.android_build.outcome }}
+          APPIUM_INSTALL_RESULT: ${{ steps.appium_install.outcome }}
+          APPIUM_RESULT: ${{ steps.appium.outcome }}
+        run: node scripts/ci-summary.mjs
+
+      - name: Upload detailed execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pharmalert-quality-gate-evidence
+          path: reports/evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Fail the workflow if any required gate failed or did not run
+        if: always()
+        env:
+          TYPECHECK_RESULT: ${{ steps.types.outcome }}
+          UNIT_RESULT: ${{ steps.unit.outcome }}
+          BACKEND_RESULT: ${{ steps.backend.outcome }}
+          DATASET_RESULT: ${{ steps.dataset.outcome }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
+          SELENIUM_RESULT: ${{ steps.selenium.outcome }}
+          SECURITY_RESULT: ${{ steps.security.outcome }}
+          AUDIT_RESULT: ${{ steps.audit.outcome }}
+          PERFORMANCE_RESULT: ${{ steps.performance.outcome }}
+          PREBUILD_RESULT: ${{ steps.prebuild.outcome }}
+          ANDROID_BUILD_RESULT: ${{ steps.android_build.outcome }}
+          APPIUM_INSTALL_RESULT: ${{ steps.appium_install.outcome }}
+          APPIUM_RESULT: ${{ steps.appium.outcome }}
+        run: node scripts/ci-enforce.mjs
