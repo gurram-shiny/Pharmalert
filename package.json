@@ -1,0 +1,33 @@
+{
+  "name": "pharmalert-ai",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @pharmalert/web-frontend",
+    "mobile": "npm run start -w @pharmalert/app-frontend",
+    "build": "npm run build -w @pharmalert/web-frontend",
+    "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/unit/*.test.ts tests/unit/*.test.mjs",
+    "server": "node --experimental-transform-types --env-file-if-exists=.env backend/index.ts",
+    "verify:dataset": "node datasets/validation/verify-source.ts",
+    "test:backend": "node --test tests/integration/backend.test.mjs",
+    "test:web": "node tests/web/selenium.mjs",
+    "test:mobile": "node tests/mobile/appium.mjs",
+    "start": "node scripts/start-local.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "~19.1.0",
+    "@types/react-dom": "~19.1.0",
+    "selenium-webdriver": "^4.51.0",
+    "typescript": "~5.9.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.33",
+    "expo": "^58.0.0"
+  }
+}

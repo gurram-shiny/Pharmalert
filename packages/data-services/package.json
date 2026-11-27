@@ -1,0 +1,10 @@
+{
+  "name": "@pharmalert/data-services",
+  "private": true,
+  "type": "module",
+  "exports": "./index.ts",
+  "dependencies": {
+    "@pharmalert/shared": "*",
+    "@pharmalert/interaction-engine": "*"
+  }
+}

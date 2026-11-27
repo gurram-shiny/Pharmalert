@@ -1,0 +1,21 @@
+name: Performance tests
+on: [workflow_dispatch]
+jobs:
+  performance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: grafana/setup-k6-action@v1
+      - run: |
+          mkdir -p reports/evidence
+          npm run server > backend.log 2>&1 &
+          timeout 60 bash -c 'until curl -fsS http://127.0.0.1:8787/api/status; do sleep 2; done'
+          k6 run tests/performance/k6.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-output
+          path: reports/evidence/k6.json

@@ -1,0 +1,23 @@
+{
+  "name": "@pharmalert/web-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@pharmalert/shared": "*",
+    "@pharmalert/data-services": "*",
+    "@pharmalert/interaction-engine": "*",
+    "@tailwindcss/vite": "^4",
+    "tailwindcss": "^4",
+    "vite": "^7",
+    "@vitejs/plugin-react": "^5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router-dom": "^7",
+    "lucide-react": "^0.511",
+    "recharts": "^3"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "validation_precision_gate_met": true,
+  "source": "https://raw.githubusercontent.com/isegura/DDICorpus/819b0fa538ed83ab2a8b4f5417bba3c03249b7f3/DDICorpus-2013.zip",
+  "sha256": "87fc63e32ebce20d9841c372e0c594ec72d60882ab5621550ca73c3eaf80ab60",
+  "sklearn": "1.9.1",
+  "excluded": {
+    "test_unsupported_spans": 28,
+    "train_unsupported_spans": 112,
+    "validation_unsupported_spans": 17,
+    "test_sentence_overlap": 0,
+    "validation_sentence_overlap": 11,
+    "train_sentence_overlap": 243
+  },
+  "pairs": {
+    "train": 23224,
+    "validation": 4185,
+    "test": 5688
+  },
+  "documents": {
+    "train": 499,
+    "validation": 118,
+    "test": 191
+  },
+  "validation": {
+    "tp": 80,
+    "fp": 4,
+    "fn": 608,
+    "tn": 3493,
+    "precision": 0.9523809523809523,
+    "recall": 0.11627906976744186,
+    "f1": 0.20725388601036268,
+    "average_precision": 0.7267005973640757,
+    "positive_prevalence": 0.16439665471923537
+  },
+  "test": {
+    "tp": 90,
+    "fp": 16,
+    "fn": 886,
+    "tn": 4696,
+    "precision": 0.8490566037735849,
+    "recall": 0.09221311475409837,
+    "f1": 0.16635859519408502,
+    "average_precision": 0.7134417737292604,
+    "positive_prevalence": 0.17158931082981715
+  },
+  "threshold": 0.5869064139163799,
+  "DrugBank": {
+    "tp": 88,
+    "fp": 13,
+    "fn": 796,
+    "tn": 4354,
+    "precision": 0.8712871287128713,
+    "recall": 0.09954751131221719,
+    "f1": 0.17868020304568527,
+    "average_precision": 0.7393795685686273,
+    "positive_prevalence": 0.1683488859264902
+  },
+  "MedLine": {
+    "tp": 2,
+    "fp": 3,
+    "fn": 90,
+    "tn": 342,
+    "precision": 0.4,
+    "recall": 0.021739130434782608,
+    "f1": 0.041237113402061855,
+    "average_precision": 0.4432161460138101,
+    "positive_prevalence": 0.21052631578947367
+  },
+  "export_parity_cases": 5688
+}

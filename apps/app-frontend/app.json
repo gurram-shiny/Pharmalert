@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "PharmAlert AI",
+    "slug": "pharmalert-ai",
+    "scheme": "pharmalert",
+    "platforms": [
+      "android",
+      "ios"
+    ],
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      "./plugins/with-windows-cmake.cjs",
+      "expo-font",
+      "expo-sharing",
+      "expo-status-bar"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.pharmalert.app"
+    },
+    "android": {
+      "package": "com.pharmalert.app"
+    }
+  }
+}

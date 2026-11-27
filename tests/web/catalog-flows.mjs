@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {Builder,By,until} from 'selenium-webdriver';
+import chrome from 'selenium-webdriver/chrome.js';
+
+const origin=process.env.PHARMALERT_WEB_URL??'http://127.0.0.1:5173';
+const driver=await new Builder().forBrowser('chrome').setChromeOptions(new chrome.Options().addArguments('--headless=new','--window-size=1440,1000')).build();
+const field=css=>driver.wait(until.elementLocated(By.css(css)),12000);
+const button=title=>driver.findElement(By.xpath('//button[normalize-space(.)="'+title+'"]'));
+try{
+  await driver.get(origin+'/checker');
+  await (await field('input[name=email]')).isDisplayed();
+  await (await button('Create an account')).click();
+  for(const [key,value] of Object.entries({name:'Catalog QA',email:randomUUID()+'@example.test',password:'local-test-password'}))await (await field('input[name='+key+']')).sendKeys(value);
+  await (await button('Create account')).click();
+  await field('.checker-row');
+  const rows=await driver.findElements(By.css('.checker-row'));
+  const select=async(row,n)=>row.findElement(By.css('select option:nth-child('+n+')')).then(el=>el.click());
+  await (await rows[0].findElement(By.css('input'))).sendKeys('zoc');
+  assert.ok((await rows[0].findElements(By.css('datalist option'))).some(Boolean));
+  assert.ok((await rows[0].getAttribute('innerHTML')).toLowerCase().includes('zocor'));
+  const medicine=await rows[0].findElement(By.css('input'));
+  await medicine.clear();await medicine.sendKeys('8-MOP');
+  assert.match(await rows[0].getText(),/US catalog · Historical product only/);
+  await medicine.clear();await medicine.sendKeys('zoc');
+  await select(rows[1],2);
+  await (await rows[1].findElement(By.css('input'))).sendKeys('magnesium');
+  assert.ok((await rows[1].findElements(By.css('datalist option'))).length>0);
+  const supplement=await rows[1].findElement(By.css('input'));
+  await supplement.clear();await supplement.sendKeys('#14 LB-CLN');
+  assert.match(await rows[1].getText(),/US catalog · Historical product only/);
+  await select(rows[1],4);
+  assert.ok((await rows[1].getAttribute('innerHTML')).toLowerCase().includes('grapefruit juice'));
+  assert.match(await rows[1].getText(),/Supported foods only: Grapefruit juice, Caffeine/);
+  await select(rows[1],3);
+  assert.equal((await rows[1].findElements(By.css('input'))).length,0);
+  await (await button('Check interactions')).click();
+  assert.equal(await (await field('article.pair h3')).getText(),'zoc + Alcohol');
+  await select(rows[1],1);
+  assert.equal(await (await rows[1].findElement(By.css('input'))).getAttribute('value'),'');
+  await (await field('[aria-label=Account]')).click();
+  await driver.executeScript("const real=window.fetch;window.fetch=(url,...args)=>String(url).endsWith('/auth/logout')?Promise.reject(Error('offline')):real(url,...args)");
+  await (await button('Sign out')).click();
+  await field('input[name=email]');
+  await driver.navigate().refresh();
+  await field('input[name=email]');
+  console.log('Passed medicine and supplement search, alcohol submission, category reset, offline sign-out and reload.');
+}finally{await driver.quit();}
