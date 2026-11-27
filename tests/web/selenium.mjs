@@ -1,6 +1,6 @@
 import {reportGroups} from '../report-cases.mjs';
 import assert from 'node:assert/strict';
-import { Builder, By, until } from 'selenium-webdriver';
+import { Builder, By, Select, until } from 'selenium-webdriver';
 import chrome from 'selenium-webdriver/chrome.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -64,18 +64,22 @@ try {
   await driver.get(origin+'/checker');
   for(const group of reportGroups(true)){
     while((await driver.findElements(By.css('.checker-row'))).length<group.inputs.length)await (await button('Add substance')).click();
-    const fields=await driver.findElements(By.css('.checker-row'));
     for(const [i,item] of group.inputs.entries()){
-      await fields[i].findElement(By.css('select option:nth-child('+(['medicine','supplement','alcohol','food'].indexOf(item.kind)+1)+')')).click();
+      let field=(await driver.findElements(By.css('.checker-row')))[i];
+      await new Select(await field.findElement(By.css('select'))).selectByVisibleText(item.kind);
+      field=(await driver.findElements(By.css('.checker-row')))[i];
       if(item.kind==='alcohol'){
-        assert.equal((await fields[i].findElements(By.css('input'))).length,0);
+        assert.equal((await field.findElements(By.css('input'))).length,0);
       }else{
-        const name=await fields[i].findElement(By.css('input'));
+        const name=await field.findElement(By.css('input'));
+        await driver.wait(until.elementIsVisible(name),10000);
+        await driver.executeScript('arguments[0].scrollIntoView({block:"center"})',name);
         await name.clear();await name.sendKeys(item.name);
       }
     }
     await (await button('Check interactions')).click();
     await driver.wait(async()=>(await driver.findElements(By.css('.pair'))).length===group.pairs.length,15000);
+    await driver.wait(until.elementIsEnabled(await button('Check interactions')),10000);
     const displayed=await driver.executeScript("return Array.from(document.querySelectorAll('.pair'),pair=>[pair.querySelector('h3').textContent,(pair.querySelector('.badge')||pair.querySelector('p')).textContent])");
     const observed=new Map(displayed);
     for(const pair of group.pairs){
