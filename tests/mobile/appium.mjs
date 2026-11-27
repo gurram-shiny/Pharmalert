@@ -8,7 +8,7 @@ import { mkdir,writeFile } from 'node:fs/promises';
 const apk=process.env.PHARMALERT_APK;
 if(!apk)throw new Error('Set PHARMALERT_APK to the absolute path of an Android test build.');
 const executor=new Executor(new HttpClient(process.env.APPIUM_URL ?? 'http://127.0.0.1:4723'));
-const driver=WebDriver.createSession(executor,{platformName:'Android','appium:automationName':'UiAutomator2','appium:app':apk,...(process.env.ANDROID_SERIAL?{'appium:udid':process.env.ANDROID_SERIAL,'appium:systemPort':Number(process.env.APPIUM_SYSTEM_PORT??8201)}:{}),'appium:uiautomator2ServerInstallTimeout':120000});
+const driver=WebDriver.createSession(executor,{platformName:'Android','appium:automationName':'UiAutomator2','appium:app':apk,...(process.env.ANDROID_SERIAL?{'appium:udid':process.env.ANDROID_SERIAL,'appium:systemPort':Number(process.env.APPIUM_SYSTEM_PORT??8201)}:{}),'appium:androidInstallTimeout':300000,'appium:adbExecTimeout':120000,'appium:uiautomator2ServerInstallTimeout':300000});
 const rows=[];
 let pairIndex=0;
 const email=randomUUID()+'@example.test';
