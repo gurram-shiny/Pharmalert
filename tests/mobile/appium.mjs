@@ -12,7 +12,7 @@ if(expectedPairCount<300)throw new Error(`Appium matrix requires at least 300 in
 const expectedCaseCount=expectedPairCount+(process.env.PHARMALERT_TEST_OFFLINE==='1'?6:5);
 console.log(`Appium planned cases: ${expectedCaseCount} (${expectedPairCount} saved-report pairs plus ${expectedCaseCount-expectedPairCount} native flows).`);
 const executor=new Executor(new HttpClient(process.env.APPIUM_URL ?? 'http://127.0.0.1:4723'));
-const driver=WebDriver.createSession(executor,{platformName:'Android','appium:automationName':'UiAutomator2','appium:app':apk,...(process.env.ANDROID_SERIAL?{'appium:udid':process.env.ANDROID_SERIAL,'appium:systemPort':Number(process.env.APPIUM_SYSTEM_PORT??8201)}:{}),'appium:androidInstallTimeout':300000,'appium:adbExecTimeout':120000,'appium:uiautomator2ServerInstallTimeout':300000,'appium:uiautomator2ServerLaunchTimeout':300000});
+const driver=WebDriver.createSession(executor,{platformName:'Android','appium:automationName':'UiAutomator2','appium:app':apk,...(process.env.ANDROID_SERIAL?{'appium:udid':process.env.ANDROID_SERIAL,'appium:systemPort':Number(process.env.APPIUM_SYSTEM_PORT??8201)}:{}),'appium:androidInstallTimeout':300000,'appium:adbExecTimeout':120000,'appium:uiautomator2ServerInstallTimeout':300000,'appium:uiautomator2ServerLaunchTimeout':300000,'appium:settingsAppLaunchTimeout':180000,'appium:newCommandTimeout':300});
 const rows=[];
 let pairIndex=0;
 const email=randomUUID()+'@example.test';
@@ -90,11 +90,12 @@ try{
     await label('Interaction report');
     const headings=new Set(group.pairs.map(pair=>pair.heading));
     const observed=new Map();
+    const tabLabels=new Set(['Overview','Check','Medicines','Records']);
     for(let page=0;page<100;page++){
       const xml=await driver.getPageSource();
       const lines=[...xml.matchAll(/<android\.widget\.TextView\b[^>]*?\btext="([^"]+)"/g)].map(match=>match[1]);
       for(let i=0;i+1<lines.length;i++){
-        if(headings.has(lines[i])&&!headings.has(lines[i+1]))observed.set(lines[i],lines[i+1]);
+        if(headings.has(lines[i])&&!headings.has(lines[i+1])&&!tabLabels.has(lines[i+1]))observed.set(lines[i],lines[i+1]);
       }
       if(observed.size===headings.size)break;
       const canScroll=await scroll('down');

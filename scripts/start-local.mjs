@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 const root = new URL('../',import.meta.url);
 const processes = [
   spawn(process.execPath,['--experimental-transform-types','--env-file-if-exists=.env','backend/index.ts'],{cwd:root,stdio:'inherit'}),
-  spawn(process.execPath,[fileURLToPath(new URL('node_modules/vite/bin/vite.js',root)),'--strictPort'],{cwd:new URL('apps/web-frontend/',root),stdio:'inherit'}),
+  spawn(process.execPath,[fileURLToPath(new URL('node_modules/vite/bin/vite.js',root)),'--strictPort'],{cwd:new URL('apps/web-frontend/',root),stdio:'inherit',env:{...process.env,VITE_BACKEND_URL:'/'}}),
 ];
 let stopping = false;
 function stop(code) {

@@ -44,7 +44,7 @@ export function suggestions(kind: CatalogKind, search: string): string[] {
   const query = search.trim().toLowerCase();
   const top = priority[kind].filter(name => !query || name.toLowerCase().includes(query));
   if (kind === 'food') return top;
-  if (!query) return top.slice(0, 10);
+  if (!query) return [];
   if (query.length < 2) return top.slice(0, 8);
   const rows = ensureIndex(kind);
   const seen = new Set(top.map(n => n.toLowerCase()));

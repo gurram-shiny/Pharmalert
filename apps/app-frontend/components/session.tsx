@@ -1,10 +1,7 @@
 import { createContext,useContext,useEffect,useMemo,useState,type ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
 import { service,type Session } from '@pharmalert/data-services';
-const devHost=Constants.expoConfig?.hostUri?.split(':')[0];
-const base=process.env.EXPO_PUBLIC_BACKEND_URL ?? (devHost?`http://${devHost}:8787`:(Platform.OS==='android'?'http://10.0.2.2:8787':'http://127.0.0.1:8787'));
+const base=process.env.EXPO_PUBLIC_BACKEND_URL;
 const key='pharmalert-session';
 type Value={session:Session|null;loading:boolean;restoreError:string|null;api:ReturnType<typeof service>;remember:(value:Session|null)=>Promise<void>};
 const Context=createContext<Value|null>(null);

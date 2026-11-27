@@ -11,6 +11,9 @@ permissions:
 jobs:
   full-suite:
     name: Unit, backend, web, Android, security and performance
+    env:
+      VITE_BACKEND_URL: http://127.0.0.1:8787
+      EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8787
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -73,11 +76,18 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          npm run server > reports/evidence/selenium-backend.log 2>&1 &
+          PHARMALERT_DB=:memory: PHARMALERT_HOST=127.0.0.1 node --experimental-transform-types --env-file-if-exists=.env backend/index.ts > reports/evidence/selenium-backend.log 2>&1 &
           backend_pid=$!
-          npm run dev -w @pharmalert/web-frontend -- --host 127.0.0.1 > reports/evidence/selenium-web.log 2>&1 &
+          (cd apps/web-frontend && exec node ../../node_modules/vite/bin/vite.js --host 127.0.0.1 --strictPort) > reports/evidence/selenium-web.log 2>&1 &
           web_pid=$!
-          trap 'kill "$backend_pid" "$web_pid" 2>/dev/null || true' EXIT
+          cleanup() {
+            status=$?
+            trap - EXIT
+            kill "$backend_pid" "$web_pid" 2>/dev/null || true
+            wait "$backend_pid" "$web_pid" 2>/dev/null || true
+            exit "$status"
+          }
+          trap cleanup EXIT
           timeout 90 bash -c 'until curl -fsS http://127.0.0.1:5173/api/status; do sleep 2; done'
           npm run test:web
 
@@ -99,9 +109,16 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          npm run server > reports/evidence/performance-backend.log 2>&1 &
+          PHARMALERT_DB=:memory: PHARMALERT_HOST=127.0.0.1 node --experimental-transform-types --env-file-if-exists=.env backend/index.ts > reports/evidence/performance-backend.log 2>&1 &
           backend_pid=$!
-          trap 'kill "$backend_pid" 2>/dev/null || true' EXIT
+          cleanup() {
+            status=$?
+            trap - EXIT
+            kill "$backend_pid" 2>/dev/null || true
+            wait "$backend_pid" 2>/dev/null || true
+            exit "$status"
+          }
+          trap cleanup EXIT
           timeout 90 bash -c 'until curl -fsS http://127.0.0.1:8787/api/status; do sleep 2; done'
           k6 run tests/performance/k6.js
 
@@ -127,16 +144,30 @@ jobs:
           npm install --global appium
           appium driver install uiautomator2
 
+      - name: Enable KVM hardware acceleration
+        if: steps.android_build.outcome == 'success' && steps.appium_install.outcome == 'success'
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+            sudo chmod 666 /dev/kvm || true
+            ls -la /dev/kvm
+          fi
+
       - name: Appium Android emulator suite
         id: appium
         if: steps.android_build.outcome == 'success' && steps.appium_install.outcome == 'success'
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2.38.0
-        env:
-          ANDROID_I_WANT_MY_TCG: "yes"
         with:
-          api-level: 35
+          api-level: 34
+          target: default
           arch: x86_64
+          cores: 4
+          ram-size: 4096M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 4096
           emulator-boot-timeout: 900
           script: bash scripts/ci/run-appium.sh
 

@@ -39,11 +39,7 @@ const baselineCounts = {
 };
 const baselineStatus = combinedResult([...baselineGateResults, env.UNIT_RESULT, env.BACKEND_RESULT]);
 const appiumGateResults = [env.ANDROID_BUILD_RESULT, env.APPIUM_INSTALL_RESULT, env.APPIUM_RESULT];
-const appiumGateCounts = appiumGateResults.reduce((sum, result) => {
-  const counts = gateCount(result);
-  return { passed: sum.passed + counts.passed, failed: sum.failed + counts.failed };
-}, { passed: 0, failed: 0 });
-const appiumCounts = { passed: appiumRows.passed + appiumGateCounts.passed, failed: appiumRows.failed + appiumGateCounts.failed };
+const appiumCounts = appiumRows;
 const appiumStatus = combinedResult(appiumGateResults);
 const tests = [
   ['Selenium', seleniumCounts, env.SELENIUM_RESULT],

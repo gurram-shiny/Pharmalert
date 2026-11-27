@@ -8,7 +8,7 @@ export function Page({title,subtitle,children}:{title:string;subtitle?:string;ch
   </ScrollView></SafeAreaView>;
 }
 export function Button({title,onPress,secondary,disabled}:{title:string;onPress:()=>void;secondary?:boolean;disabled?:boolean}) {
-  return <Pressable accessibilityRole="button" accessibilityState={{disabled:!!disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.button,secondary&&styles.secondary,{opacity:disabled ? 0.5 : pressed ? 0.72 : 1}]}><Text style={secondary?styles.secondaryText:styles.buttonText}>{title}</Text></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{disabled:!!disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.button,secondary&&styles.secondary,{opacity:disabled ? 0.5 : pressed ? 0.72 : 1}]}><Text style={secondary?styles.secondaryText:styles.buttonText}>{title}</Text></Pressable>;
 }
 export const styles=StyleSheet.create({
   screen:{flex:1,backgroundColor:'#f5f8fa'},content:{padding:20,paddingBottom:44},h1:{fontSize:33,fontWeight:'800',color:'#162840',letterSpacing:-1},h2:{fontSize:20,fontWeight:'700',color:'#162840'},

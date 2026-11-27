@@ -3,7 +3,18 @@ import { clinicalReleaseVersion,type Analysis,type Substance } from '@pharmalert
 
 export type User = { id:string; name:string; email:string };
 export type Session = { token:string; user:User };
-const DEFAULT_API_BASE = '';
+export const CLOUD_API_BASE = 'https://qkbbeckqyegvaeqgzvbk.supabase.co/functions/v1/pharmalert-api';
+const DEFAULT_API_BASE = CLOUD_API_BASE;
+let cloudReady: Promise<void> | undefined;
+function checkCloudBackend() {
+  cloudReady ??= fetch(CLOUD_API_BASE + '/api/status', {cache:'no-store'})
+    .then(async response => {
+      if (!response.ok || (await response.json()).auth_provider !== 'supabase-auth-v1')
+        throw new Error('Cloud sign-in is awaiting the PharmAlert backend update.');
+    })
+    .catch(error => { cloudReady = undefined; throw error; });
+  return cloudReady;
+}
 function currentReport(report:Analysis|undefined){
   return report?.dataset?.version===clinicalReleaseVersion && Array.isArray(report.pairs) &&
     report.pairs.every(pair=>Array.isArray(pair.matches)&&pair.matches.every(rule=>rule.verification_status==='VERIFIED'&&
@@ -12,6 +23,7 @@ function currentReport(report:Analysis|undefined){
 export function service(base = DEFAULT_API_BASE, token?: string) {
   const apiBase = (base || DEFAULT_API_BASE).replace(/\/$/,'');
   const request = async (path:string, method = 'GET', body?:unknown) => {
+    if (apiBase === CLOUD_API_BASE) await checkCloudBackend();
     const response = await fetch(apiBase + '/api/' + path, {
       method, headers: { ...(body === undefined ? {} : {'Content-Type':'application/json'}), ...(token ? {Authorization:'Bearer '+token} : {}) },
       body:body === undefined ? undefined : JSON.stringify(body),
