@@ -8,14 +8,24 @@ on:
 permissions:
   contents: read
 
+env:
+  VITE_BACKEND_URL: http://127.0.0.1:8787
+  EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8787
+
 jobs:
-  full-suite:
-    name: Unit, backend, web, Android, security and performance
-    env:
-      VITE_BACKEND_URL: http://127.0.0.1:8787
-      EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8787
+  baseline:
+    name: Baseline, security and build
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
+    outputs:
+      typecheck: ${{ steps.types.outcome }}
+      unit: ${{ steps.unit.outcome }}
+      backend: ${{ steps.backend.outcome }}
+      dataset: ${{ steps.dataset.outcome }}
+      web_build: ${{ steps.web_build.outcome }}
+      bundle_export: ${{ steps.bundle_export.outcome }}
+      security: ${{ steps.security.outcome }}
+      audit: ${{ steps.audit.outcome }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -26,19 +36,11 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Set up Java for Android
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 17
-
       - name: Install locked dependencies
         run: npm ci
 
       - name: Prepare run reports
-        run: |
-          rm -rf reports/evidence
-          mkdir -p reports/evidence
+        run: mkdir -p reports/evidence
 
       - name: TypeScript check
         id: types
@@ -71,6 +73,61 @@ jobs:
         continue-on-error: true
         run: npm exec -w @pharmalert/app-frontend -- expo export --platform android
 
+      - name: Security source baseline
+        id: security
+        continue-on-error: true
+        run: node tests/security/check-source.mjs
+
+      - name: Dependency vulnerability audit
+        id: audit
+        continue-on-error: true
+        run: npm audit --json --audit-level=high > reports/evidence/npm-audit.json
+
+      - name: Upload baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pharmalert-evidence-baseline
+          path: reports/evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce baseline gates
+        if: always()
+        env:
+          CI_REQUIRED_GATES: TYPECHECK_RESULT,UNIT_RESULT,BACKEND_RESULT,DATASET_RESULT,WEB_BUILD_RESULT,BUNDLE_EXPORT_RESULT,SECURITY_RESULT,AUDIT_RESULT
+          TYPECHECK_RESULT: ${{ steps.types.outcome }}
+          UNIT_RESULT: ${{ steps.unit.outcome }}
+          BACKEND_RESULT: ${{ steps.backend.outcome }}
+          DATASET_RESULT: ${{ steps.dataset.outcome }}
+          WEB_BUILD_RESULT: ${{ steps.web_build.outcome }}
+          BUNDLE_EXPORT_RESULT: ${{ steps.bundle_export.outcome }}
+          SECURITY_RESULT: ${{ steps.security.outcome }}
+          AUDIT_RESULT: ${{ steps.audit.outcome }}
+        run: node scripts/ci-enforce.mjs
+
+  selenium:
+    name: Selenium browser suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      result: ${{ steps.selenium.outcome }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Prepare run reports
+        run: mkdir -p reports/evidence
+
       - name: Selenium browser suite
         id: selenium
         continue-on-error: true
@@ -91,36 +148,52 @@ jobs:
           timeout 90 bash -c 'until curl -fsS http://127.0.0.1:5173/api/status; do sleep 2; done'
           npm run test:web
 
-      - name: Security source baseline
-        id: security
-        continue-on-error: true
-        run: node tests/security/check-source.mjs
+      - name: Upload Selenium evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pharmalert-evidence-selenium
+          path: reports/evidence/
+          if-no-files-found: warn
+          retention-days: 30
 
-      - name: Dependency vulnerability audit
-        id: audit
-        continue-on-error: true
-        run: npm audit --json --audit-level=high > reports/evidence/npm-audit.json
+      - name: Enforce Selenium gate
+        if: always()
+        env:
+          CI_REQUIRED_GATES: SELENIUM_RESULT
+          SELENIUM_RESULT: ${{ steps.selenium.outcome }}
+        run: node scripts/ci-enforce.mjs
 
-      - name: Set up k6
-        uses: grafana/setup-k6-action@v1.3.0
+  appium:
+    name: Android Appium suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      prebuild: ${{ steps.prebuild.outcome }}
+      android_build: ${{ steps.android_build.outcome }}
+      appium_install: ${{ steps.appium_install.outcome }}
+      result: ${{ steps.appium.outcome }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
 
-      - name: Performance suite
-        id: performance
-        continue-on-error: true
-        shell: bash
-        run: |
-          PHARMALERT_DB=:memory: PHARMALERT_HOST=127.0.0.1 node --experimental-transform-types --env-file-if-exists=.env backend/index.ts > reports/evidence/performance-backend.log 2>&1 &
-          backend_pid=$!
-          cleanup() {
-            status=$?
-            trap - EXIT
-            kill "$backend_pid" 2>/dev/null || true
-            wait "$backend_pid" 2>/dev/null || true
-            exit "$status"
-          }
-          trap cleanup EXIT
-          timeout 90 bash -c 'until curl -fsS http://127.0.0.1:8787/api/status; do sleep 2; done'
-          k6 run tests/performance/k6.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Java for Android
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Prepare run reports
+        run: mkdir -p reports/evidence
 
       - name: Prepare Android native project
         id: prebuild
@@ -130,6 +203,7 @@ jobs:
 
       - name: Build Android test APK
         id: android_build
+        if: steps.prebuild.outcome == 'success'
         continue-on-error: true
         shell: bash
         working-directory: apps/app-frontend/android
@@ -171,26 +245,127 @@ jobs:
           emulator-boot-timeout: 900
           script: bash scripts/ci/run-appium.sh
 
-      - name: Build test graphs and workflow summary
+      - name: Upload Appium evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pharmalert-evidence-appium
+          path: reports/evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce Appium gates
         if: always()
         env:
-          TYPECHECK_RESULT: ${{ steps.types.outcome }}
-          UNIT_RESULT: ${{ steps.unit.outcome }}
-          BACKEND_RESULT: ${{ steps.backend.outcome }}
-          DATASET_RESULT: ${{ steps.dataset.outcome }}
-          WEB_BUILD_RESULT: ${{ steps.web_build.outcome }}
-          BUNDLE_EXPORT_RESULT: ${{ steps.bundle_export.outcome }}
-          SELENIUM_RESULT: ${{ steps.selenium.outcome }}
-          SECURITY_RESULT: ${{ steps.security.outcome }}
-          AUDIT_RESULT: ${{ steps.audit.outcome }}
-          PERFORMANCE_RESULT: ${{ steps.performance.outcome }}
+          CI_REQUIRED_GATES: PREBUILD_RESULT,ANDROID_BUILD_RESULT,APPIUM_INSTALL_RESULT,APPIUM_RESULT
           PREBUILD_RESULT: ${{ steps.prebuild.outcome }}
           ANDROID_BUILD_RESULT: ${{ steps.android_build.outcome }}
           APPIUM_INSTALL_RESULT: ${{ steps.appium_install.outcome }}
           APPIUM_RESULT: ${{ steps.appium.outcome }}
+        run: node scripts/ci-enforce.mjs
+
+  performance:
+    name: k6 performance suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      result: ${{ steps.performance.outcome }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Prepare run reports
+        run: mkdir -p reports/evidence
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1.3.0
+
+      - name: Performance suite
+        id: performance
+        continue-on-error: true
+        shell: bash
+        run: |
+          PHARMALERT_DB=:memory: PHARMALERT_HOST=127.0.0.1 node --experimental-transform-types --env-file-if-exists=.env backend/index.ts > reports/evidence/performance-backend.log 2>&1 &
+          backend_pid=$!
+          cleanup() {
+            status=$?
+            trap - EXIT
+            kill "$backend_pid" 2>/dev/null || true
+            wait "$backend_pid" 2>/dev/null || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+          timeout 90 bash -c 'until curl -fsS http://127.0.0.1:8787/api/status; do sleep 2; done'
+          k6 run tests/performance/k6.js
+
+      - name: Upload performance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pharmalert-evidence-performance
+          path: reports/evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce performance gate
+        if: always()
+        env:
+          CI_REQUIRED_GATES: PERFORMANCE_RESULT
+          PERFORMANCE_RESULT: ${{ steps.performance.outcome }}
+        run: node scripts/ci-enforce.mjs
+
+  summary:
+    name: Workflow summary and combined evidence
+    if: always()
+    needs: [baseline, selenium, appium, performance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Prepare evidence directory
+        run: mkdir -p reports/evidence
+
+      - name: Download suite evidence
+        uses: actions/download-artifact@v7
+        with:
+          pattern: pharmalert-evidence-*
+          path: reports/evidence
+          merge-multiple: true
+
+      - name: Build test graphs and workflow summary
+        env:
+          TYPECHECK_RESULT: ${{ needs.baseline.outputs.typecheck }}
+          UNIT_RESULT: ${{ needs.baseline.outputs.unit }}
+          BACKEND_RESULT: ${{ needs.baseline.outputs.backend }}
+          DATASET_RESULT: ${{ needs.baseline.outputs.dataset }}
+          WEB_BUILD_RESULT: ${{ needs.baseline.outputs.web_build }}
+          BUNDLE_EXPORT_RESULT: ${{ needs.baseline.outputs.bundle_export }}
+          SECURITY_RESULT: ${{ needs.baseline.outputs.security }}
+          AUDIT_RESULT: ${{ needs.baseline.outputs.audit }}
+          SELENIUM_RESULT: ${{ needs.selenium.outputs.result }}
+          PERFORMANCE_RESULT: ${{ needs.performance.outputs.result }}
+          PREBUILD_RESULT: ${{ needs.appium.outputs.prebuild }}
+          ANDROID_BUILD_RESULT: ${{ needs.appium.outputs.android_build }}
+          APPIUM_INSTALL_RESULT: ${{ needs.appium.outputs.appium_install }}
+          APPIUM_RESULT: ${{ needs.appium.outputs.result }}
         run: node scripts/ci-summary.mjs
 
-      - name: Upload detailed execution evidence
+      - name: Upload combined execution evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -200,20 +375,19 @@ jobs:
           retention-days: 30
 
       - name: Fail the workflow if any required gate failed or did not run
-        if: always()
         env:
-          TYPECHECK_RESULT: ${{ steps.types.outcome }}
-          UNIT_RESULT: ${{ steps.unit.outcome }}
-          BACKEND_RESULT: ${{ steps.backend.outcome }}
-          DATASET_RESULT: ${{ steps.dataset.outcome }}
-          WEB_BUILD_RESULT: ${{ steps.web_build.outcome }}
-          BUNDLE_EXPORT_RESULT: ${{ steps.bundle_export.outcome }}
-          SELENIUM_RESULT: ${{ steps.selenium.outcome }}
-          SECURITY_RESULT: ${{ steps.security.outcome }}
-          AUDIT_RESULT: ${{ steps.audit.outcome }}
-          PERFORMANCE_RESULT: ${{ steps.performance.outcome }}
-          PREBUILD_RESULT: ${{ steps.prebuild.outcome }}
-          ANDROID_BUILD_RESULT: ${{ steps.android_build.outcome }}
-          APPIUM_INSTALL_RESULT: ${{ steps.appium_install.outcome }}
-          APPIUM_RESULT: ${{ steps.appium.outcome }}
+          TYPECHECK_RESULT: ${{ needs.baseline.outputs.typecheck }}
+          UNIT_RESULT: ${{ needs.baseline.outputs.unit }}
+          BACKEND_RESULT: ${{ needs.baseline.outputs.backend }}
+          DATASET_RESULT: ${{ needs.baseline.outputs.dataset }}
+          WEB_BUILD_RESULT: ${{ needs.baseline.outputs.web_build }}
+          BUNDLE_EXPORT_RESULT: ${{ needs.baseline.outputs.bundle_export }}
+          SECURITY_RESULT: ${{ needs.baseline.outputs.security }}
+          AUDIT_RESULT: ${{ needs.baseline.outputs.audit }}
+          SELENIUM_RESULT: ${{ needs.selenium.outputs.result }}
+          PERFORMANCE_RESULT: ${{ needs.performance.outputs.result }}
+          PREBUILD_RESULT: ${{ needs.appium.outputs.prebuild }}
+          ANDROID_BUILD_RESULT: ${{ needs.appium.outputs.android_build }}
+          APPIUM_INSTALL_RESULT: ${{ needs.appium.outputs.appium_install }}
+          APPIUM_RESULT: ${{ needs.appium.outputs.result }}
         run: node scripts/ci-enforce.mjs
