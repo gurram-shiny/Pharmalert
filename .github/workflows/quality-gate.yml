@@ -16,15 +16,6 @@ jobs:
     name: Baseline, security and build
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    outputs:
-      typecheck: ${{ steps.types.outcome }}
-      unit: ${{ steps.unit.outcome }}
-      backend: ${{ steps.backend.outcome }}
-      dataset: ${{ steps.dataset.outcome }}
-      web_build: ${{ steps.web_build.outcome }}
-      bundle_export: ${{ steps.bundle_export.outcome }}
-      security: ${{ steps.security.outcome }}
-      audit: ${{ steps.audit.outcome }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -82,6 +73,22 @@ jobs:
         continue-on-error: true
         run: npm audit --json --audit-level=high > reports/evidence/npm-audit.json
 
+      - name: Publish baseline results and Excel workbook
+        if: always()
+        env:
+          CI_SUITE: baseline
+          TYPECHECK_RESULT: ${{ steps.types.outcome }}
+          UNIT_RESULT: ${{ steps.unit.outcome }}
+          BACKEND_RESULT: ${{ steps.backend.outcome }}
+          DATASET_RESULT: ${{ steps.dataset.outcome }}
+          WEB_BUILD_RESULT: ${{ steps.web_build.outcome }}
+          BUNDLE_EXPORT_RESULT: ${{ steps.bundle_export.outcome }}
+          SECURITY_RESULT: ${{ steps.security.outcome }}
+          AUDIT_RESULT: ${{ steps.audit.outcome }}
+        run: |
+          node scripts/ci-suite-report.mjs
+          python3 scripts/ci/export-results-xlsx.py reports/evidence/ci-results-baseline.json reports/evidence/quality-results-baseline.xlsx
+
       - name: Upload baseline evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -109,8 +116,6 @@ jobs:
     name: Selenium browser suite
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    outputs:
-      result: ${{ steps.selenium.outcome }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -147,6 +152,15 @@ jobs:
           timeout 90 bash -c 'until curl -fsS http://127.0.0.1:5173/api/status; do sleep 2; done'
           npm run test:web
 
+      - name: Publish Selenium results and Excel workbook
+        if: always()
+        env:
+          CI_SUITE: selenium
+          SELENIUM_RESULT: ${{ steps.selenium.outcome }}
+        run: |
+          node scripts/ci-suite-report.mjs
+          python3 scripts/ci/export-results-xlsx.py reports/evidence/ci-results-selenium.json reports/evidence/quality-results-selenium.xlsx
+
       - name: Upload Selenium evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -167,11 +181,6 @@ jobs:
     name: Android Appium suite
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    outputs:
-      prebuild: ${{ steps.prebuild.outcome }}
-      android_build: ${{ steps.android_build.outcome }}
-      appium_install: ${{ steps.appium_install.outcome }}
-      result: ${{ steps.appium.outcome }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -244,6 +253,18 @@ jobs:
           emulator-boot-timeout: 900
           script: bash scripts/ci/run-appium.sh
 
+      - name: Publish Appium results and Excel workbook
+        if: always()
+        env:
+          CI_SUITE: appium
+          PREBUILD_RESULT: ${{ steps.prebuild.outcome }}
+          ANDROID_BUILD_RESULT: ${{ steps.android_build.outcome }}
+          APPIUM_INSTALL_RESULT: ${{ steps.appium_install.outcome }}
+          APPIUM_RESULT: ${{ steps.appium.outcome }}
+        run: |
+          node scripts/ci-suite-report.mjs
+          python3 scripts/ci/export-results-xlsx.py reports/evidence/ci-results-appium.json reports/evidence/quality-results-appium.xlsx
+
       - name: Upload Appium evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -267,8 +288,6 @@ jobs:
     name: k6 performance suite
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    outputs:
-      result: ${{ steps.performance.outcome }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -306,6 +325,15 @@ jobs:
           timeout 90 bash -c 'until curl -fsS http://127.0.0.1:8787/api/status; do sleep 2; done'
           k6 run tests/performance/k6.js
 
+      - name: Publish performance results and Excel workbook
+        if: always()
+        env:
+          CI_SUITE: performance
+          PERFORMANCE_RESULT: ${{ steps.performance.outcome }}
+        run: |
+          node scripts/ci-suite-report.mjs
+          python3 scripts/ci/export-results-xlsx.py reports/evidence/ci-results-performance.json reports/evidence/quality-results-performance.xlsx
+
       - name: Upload performance evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -320,73 +348,4 @@ jobs:
         env:
           CI_REQUIRED_GATES: PERFORMANCE_RESULT
           PERFORMANCE_RESULT: ${{ steps.performance.outcome }}
-        run: node scripts/ci-enforce.mjs
-
-  summary:
-    name: Workflow summary and combined evidence
-    if: always()
-    needs: [baseline, selenium, appium, performance]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Prepare evidence directory
-        run: mkdir -p reports/evidence
-
-      - name: Download suite evidence
-        uses: actions/download-artifact@v7
-        with:
-          pattern: pharmalert-evidence-*
-          path: reports/evidence
-          merge-multiple: true
-
-      - name: Build test graphs and workflow summary
-        env:
-          TYPECHECK_RESULT: ${{ needs.baseline.outputs.typecheck }}
-          UNIT_RESULT: ${{ needs.baseline.outputs.unit }}
-          BACKEND_RESULT: ${{ needs.baseline.outputs.backend }}
-          DATASET_RESULT: ${{ needs.baseline.outputs.dataset }}
-          WEB_BUILD_RESULT: ${{ needs.baseline.outputs.web_build }}
-          BUNDLE_EXPORT_RESULT: ${{ needs.baseline.outputs.bundle_export }}
-          SECURITY_RESULT: ${{ needs.baseline.outputs.security }}
-          AUDIT_RESULT: ${{ needs.baseline.outputs.audit }}
-          SELENIUM_RESULT: ${{ needs.selenium.outputs.result }}
-          PERFORMANCE_RESULT: ${{ needs.performance.outputs.result }}
-          PREBUILD_RESULT: ${{ needs.appium.outputs.prebuild }}
-          ANDROID_BUILD_RESULT: ${{ needs.appium.outputs.android_build }}
-          APPIUM_INSTALL_RESULT: ${{ needs.appium.outputs.appium_install }}
-          APPIUM_RESULT: ${{ needs.appium.outputs.result }}
-        run: node scripts/ci-summary.mjs
-
-      - name: Upload combined execution evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pharmalert-quality-gate-evidence
-          path: reports/evidence/
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: Fail the workflow if any required gate failed or did not run
-        env:
-          TYPECHECK_RESULT: ${{ needs.baseline.outputs.typecheck }}
-          UNIT_RESULT: ${{ needs.baseline.outputs.unit }}
-          BACKEND_RESULT: ${{ needs.baseline.outputs.backend }}
-          DATASET_RESULT: ${{ needs.baseline.outputs.dataset }}
-          WEB_BUILD_RESULT: ${{ needs.baseline.outputs.web_build }}
-          BUNDLE_EXPORT_RESULT: ${{ needs.baseline.outputs.bundle_export }}
-          SECURITY_RESULT: ${{ needs.baseline.outputs.security }}
-          AUDIT_RESULT: ${{ needs.baseline.outputs.audit }}
-          SELENIUM_RESULT: ${{ needs.selenium.outputs.result }}
-          PERFORMANCE_RESULT: ${{ needs.performance.outputs.result }}
-          PREBUILD_RESULT: ${{ needs.appium.outputs.prebuild }}
-          ANDROID_BUILD_RESULT: ${{ needs.appium.outputs.android_build }}
-          APPIUM_INSTALL_RESULT: ${{ needs.appium.outputs.appium_install }}
-          APPIUM_RESULT: ${{ needs.appium.outputs.result }}
         run: node scripts/ci-enforce.mjs

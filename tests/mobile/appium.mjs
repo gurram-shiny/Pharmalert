@@ -28,6 +28,10 @@ async function scrollTo(name){
   }
   return label(name);
 }
+async function scrollToTop(){
+  const scroller=await driver.findElement(By.className('android.widget.ScrollView'));
+  await driver.executeScript('mobile: scrollGesture',{elementId:await scroller.getId(),direction:'up',percent:1});
+}
 async function run(id,description,expected,check){
   try{await check();rows.push({id,description,expected,actual:expected,status:'PASS',timestamp:new Date().toISOString(),evidence:'tests/mobile/appium.mjs'});}
   catch(error){rows.push({id,description,expected,actual:error.message.split('\n')[0],status:'FAIL',timestamp:new Date().toISOString(),evidence:'tests/mobile/appium.mjs'});console.error(`${id} failed: ${error.message.split('\n')[0]}`);}
@@ -40,20 +44,24 @@ try{
     await (await label('Medicines')).click();await (await label('Add record')).click();
     await (await input('Medicine name')).sendKeys('Zocor');await driver.executeScript('mobile: hideKeyboard').catch(()=>{});
     await (await scrollTo('Save record')).click();assert.ok(await label('Medicine name · Zocor'));
-    await (await label('Check')).click();await (await input('Substance 1')).sendKeys('Zocor');await (await input('Substance 2')).sendKeys('Gemfibrozil');
+    await (await label('Check')).click();await (await input('Substance 1')).sendKeys('Zocor');await driver.executeScript('mobile: hideKeyboard').catch(()=>{});
+    await (await input('Substance 2')).sendKeys('Gemfibrozil');
     await driver.executeScript('mobile: hideKeyboard').catch(()=>{});await (await label('Check interactions')).click();
     await scrollTo('Interaction report');
     assert.ok(await scrollTo('Contraindicated'));
   });
   await run('MC01','Medicine and supplement catalog search','The selected historical product is identified in each US catalog.',async()=>{
     await (await label('Check')).click();
+    await scrollToTop();
+    await (await driver.findElements(By.xpath('//*[@content-desc="Supplement"]')))[0].click();
+    await (await driver.findElements(By.xpath('//*[@content-desc="Medicine"]')))[0].click();
     const first=await input('Substance 1');
-    await first.clear();await first.sendKeys('8-MOP');
+    await first.sendKeys('8-MOP');
     await driver.executeScript('mobile: hideKeyboard').catch(()=>{});
     assert.ok(await label('US catalog · Historical product only'));
     await (await driver.findElements(By.xpath('//*[@content-desc="Supplement"]')))[0].click();
     const supplement=await input('Substance 1');
-    assert.equal(await supplement.getAttribute('text'),'Search supplement labels');
+    assert.equal(await supplement.getAttribute('hint'),'Search supplement labels');
     await supplement.sendKeys('#14 LB-CLN');
     await driver.executeScript('mobile: hideKeyboard').catch(()=>{});
     assert.ok(await label('US catalog · Historical product only'));
@@ -63,8 +71,9 @@ try{
     assert.equal((await driver.findElements(By.xpath('//android.widget.EditText[@content-desc="Substance 1"]'))).length,0);
     await (await label('Check interactions')).click();
     assert.ok(await scrollTo('Alcohol + Gemfibrozil'));
+    await scrollToTop();
     await (await driver.findElements(By.xpath('//*[@content-desc="Medicine"]')))[0].click();
-    assert.equal(await (await input('Substance 1')).getAttribute('text'),'Search brand or ingredient');
+    assert.equal(await (await input('Substance 1')).getAttribute('hint'),'Search brand or ingredient');
   });
   // Generate genuine saved reports through the same local API used by the app.
   const api=process.env.PHARMALERT_API_URL??'http://127.0.0.1:8787/api';
