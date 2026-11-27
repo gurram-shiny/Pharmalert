@@ -34,7 +34,8 @@ const tests = [
   ['Performance thresholds', gateCount(env.PERFORMANCE_RESULT), env.PERFORMANCE_RESULT],
 ];
 const gates = [
-  ['TypeScript check', env.TYPECHECK_RESULT], ['Web and Android bundle build', env.BUILD_RESULT],
+  ['TypeScript check', env.TYPECHECK_RESULT], ['Web frontend build', env.WEB_BUILD_RESULT],
+  ['Android bundle export', env.BUNDLE_EXPORT_RESULT],
   ['Android prebuild', env.PREBUILD_RESULT], ['Android APK build', env.ANDROID_BUILD_RESULT],
   ['Appium setup', env.APPIUM_INSTALL_RESULT],
 ];
@@ -61,10 +62,17 @@ try {
   const unverified = report.results?.filter((row) => row.status === 'UNVERIFIED').length ?? 0;
   clinicalEvidence = `Source audit: ${verified} interaction rules verified against their recorded label passages; ${unverified} marked UNVERIFIED and must not be presented as confirmed interactions. This source check does not constitute pharmacist or clinical validation.`;
 } catch { /* Keep explicit unknown status when no clean JSON report exists. */ }
+let dependencyNote = 'Dependency audit details were not produced.';
+try {
+  const audit = JSON.parse(await read('npm-audit.json'));
+  const counts = audit.metadata?.vulnerabilities;
+  if (counts) dependencyNote = `npm audit found ${counts.critical} critical, ${counts.high} high, ${counts.moderate} moderate and ${counts.low} low severity advisories. The gate requires zero high and critical advisories; moderate advisories remain disclosed here and in the detailed artifact.`;
+} catch { /* Keep explicit unknown status when no clean JSON report exists. */ }
 const summary = `# PharmAlert full quality gate\n\n` +
   `Commit: \`${env.GITHUB_SHA ?? 'local run'}\`\n\n` +
   `## Test graph and counts\n\n| Suite | Execution | Passed | Failed | Graph (green = passed, red = failed) |\n|---|---:|---:|---:|---|\n${table}\n\n` +
   `## Build and setup gates\n\n| Gate | Execution |\n|---|---|\n${gateTable}\n\n` +
+  `## Dependency security detail\n\n${dependencyNote}\n\n` +
   `## Clinical evidence status\n\n${clinicalEvidence}\n\n` +
   `Counts come from this run's TAP or structured test reports. A missing report is recorded as zero tests and must not be interpreted as a pass. Detailed logs, screenshots and structured results are attached as the workflow artifact.${performanceNote}\n`;
 await writeFile(`${evidence}/workflow-summary.md`, summary);

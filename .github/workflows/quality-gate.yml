@@ -58,12 +58,15 @@ jobs:
         continue-on-error: true
         run: node datasets/validation/verify-source.ts > reports/evidence/dataset-validation.json 2>&1
 
-      - name: Build web and export Android bundle
-        id: build
+      - name: Build web frontend
+        id: web_build
         continue-on-error: true
-        run: |
-          npm run build
-          npm exec -w @pharmalert/app-frontend -- expo export --platform android
+        run: npm run build
+
+      - name: Export Android JavaScript bundle
+        id: bundle_export
+        continue-on-error: true
+        run: npm exec -w @pharmalert/app-frontend -- expo export --platform android
 
       - name: Selenium browser suite
         id: selenium
@@ -86,7 +89,7 @@ jobs:
       - name: Dependency vulnerability audit
         id: audit
         continue-on-error: true
-        run: npm audit --audit-level=high
+        run: npm audit --json --audit-level=high > reports/evidence/npm-audit.json
 
       - name: Set up k6
         uses: grafana/setup-k6-action@v1
@@ -149,7 +152,8 @@ jobs:
           UNIT_RESULT: ${{ steps.unit.outcome }}
           BACKEND_RESULT: ${{ steps.backend.outcome }}
           DATASET_RESULT: ${{ steps.dataset.outcome }}
-          BUILD_RESULT: ${{ steps.build.outcome }}
+          WEB_BUILD_RESULT: ${{ steps.web_build.outcome }}
+          BUNDLE_EXPORT_RESULT: ${{ steps.bundle_export.outcome }}
           SELENIUM_RESULT: ${{ steps.selenium.outcome }}
           SECURITY_RESULT: ${{ steps.security.outcome }}
           AUDIT_RESULT: ${{ steps.audit.outcome }}
@@ -176,7 +180,8 @@ jobs:
           UNIT_RESULT: ${{ steps.unit.outcome }}
           BACKEND_RESULT: ${{ steps.backend.outcome }}
           DATASET_RESULT: ${{ steps.dataset.outcome }}
-          BUILD_RESULT: ${{ steps.build.outcome }}
+          WEB_BUILD_RESULT: ${{ steps.web_build.outcome }}
+          BUNDLE_EXPORT_RESULT: ${{ steps.bundle_export.outcome }}
           SELENIUM_RESULT: ${{ steps.selenium.outcome }}
           SECURITY_RESULT: ${{ steps.security.outcome }}
           AUDIT_RESULT: ${{ steps.audit.outcome }}

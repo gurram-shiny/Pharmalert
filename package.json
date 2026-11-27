@@ -26,6 +26,9 @@
     "selenium-webdriver": "^4.51.0",
     "typescript": "~5.9.3"
   },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.68.8"
+  },
   "overrides": {
     "postcss": "^8.5.33",
     "expo": "^58.0.0"
