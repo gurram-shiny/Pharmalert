@@ -1,6 +1,6 @@
 # PharmAlert AI
 
-A medication safety workspace with a React/Vite web frontend, a native Expo app, and one Node/SQLite backend. Both frontends share the same typed data services and evidence model. The backend runs the interaction engine against a bundled, version-pinned reference set.
+A medication safety workspace with a React/Vite web frontend, a native Expo app, and a shared Supabase backend for hosted accounts and records. Both frontends share the same typed data services and evidence model. The backend runs the interaction engine against a bundled, version-pinned reference set.
 
 | Folder | Purpose |
 | --- | --- |
@@ -27,7 +27,7 @@ Use `npm run server` and `npm run dev` in separate terminals if you want to star
 
 Open http://127.0.0.1:5173. Create an account, open the checker, and enter **Zocor** and **gemfibrozil** as medicines to see the pinned source record and its revision. Use an empty local database for test data. Set `PHARMALERT_DB=:memory:` before starting the server if you want an ephemeral test database.
 
-Use `npm run mobile` in a third terminal to start Expo. Android emulators default to `http://10.0.2.2:8787`. An iOS simulator defaults to `http://127.0.0.1:8787`. For a physical device set `EXPO_PUBLIC_BACKEND_URL` in `apps/app-frontend/.env.local` to an address reachable from the phone, and run the server on an appropriate private development interface. Use HTTPS in deployed builds.
+Use `npm run mobile` in a third terminal to start Expo. For local testing set `EXPO_PUBLIC_BACKEND_URL` to `http://10.0.2.2:8787`. For an iOS simulator use `http://127.0.0.1:8787`. For a physical device set `EXPO_PUBLIC_BACKEND_URL` in `apps/app-frontend/.env.local` to an address reachable from the phone, and run the server on an appropriate private development interface. Use HTTPS in deployed builds.
 
 ## Build and verify
 
@@ -50,6 +50,6 @@ The UI suites include 360 parameterized pair cases across eight ten-substance re
 
 The medicine and supplement pickers use local US name catalogs from Drugs@FDA and NIH DSLD. See [catalog sources and refresh instructions](datasets/catalog/README.md). Search includes historical names. Catalog inclusion alone establishes neither current availability nor interaction evidence.
 
-The local backend's expanded release contains 30 interaction rules. Their shared DailyMed homepage link and single source identifier do not provide rule-by-rule provenance. Independent source verification and clinical review are pending for the expanded release. Historical four-rule QA reports describe an earlier snapshot. The [offline ML research tool](ml-research/README.md) is separate from patient-facing findings.
+The release audit records 47 source-verified interaction rules and two unverified entries. Only verified rules produce confirmed matches. Clinical review is outstanding. The [offline ML research tool](ml-research/README.md) is separate from patient-facing findings.
 
-The first-party backend replaces Supabase to meet the key-free configuration requirement. Data is owner-scoped in SQLite. Run `npm run build` and `npm run server` to serve the production web bundle and API together on port 8787. Deploy behind TLS with access-controlled file permissions and encrypted backups. The development database stores health records and files on disk without application-level encryption. Hosted deployment, compliance assessment, account recovery, broader clinical coverage and full device testing remain pending. The frontend uses an on-demand PDF print or share flow and authenticated prescription downloads. Reminder schedules and dose history persist in the backend. The native reminder screen can schedule the next set of local device notifications with permission. Resync after schedule changes or dose logging. Browser alerts require permission and an open Reminders page.
+Web and mobile default to the PharmAlert Supabase Edge Function over HTTPS. Supabase Auth identifies the user, and database row-level security scopes stored records. Email confirmation is disabled for new registrations. Local SQLite and the local HTTP server are used for development and CI. Legacy local records require verified ownership before migration. For the local web server and Vite proxy together, use `npm start`.

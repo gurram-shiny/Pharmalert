@@ -1,0 +1,4 @@
+project_id = "pharmalert"
+
+[auth.email]
+enable_confirmations = false

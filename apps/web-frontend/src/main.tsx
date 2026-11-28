@@ -64,7 +64,7 @@ function App() {
     setData({}); setLoaded(false); setError('');
     if (!session) { setReady(true); return; }
     setReady(false);
-    api.current().then(()=>{ if(live){ setReady(true); return refresh(); } }).catch(error=>{
+    api.current().then(async()=>{ if(live){ await refresh(); if(live)setReady(true); } }).catch(error=>{
       if(live){
         if(message(error)==='Your session has expired.') remember(null);
         setReady(true);setError(message(error));

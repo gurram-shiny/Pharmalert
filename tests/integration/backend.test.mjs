@@ -21,6 +21,9 @@ const account=async()=>{
 };
 test('B01 authenticates, persists the session, and rejects a logged-out session',async()=>{
   const {token,user}=await account();assert.equal((await request('medicines')).status,401);
+  assert.equal((await request('auth/login','POST',{email:user.email,password:'incorrect-password'})).status,401);
+  assert.equal((await request('auth/login','POST',{email:randomUUID()+'@example.test',password:'incorrect-password'})).status,401);
+  assert.equal((await request('auth/register','POST',{email:user.email,password:'different-password'})).status,409);
   const login=await request('auth/login','POST',{email:user.email,password:'test-session-password'});assert.equal(login.status,200);
   assert.equal((await (await request('auth/session','GET',undefined,token)).json()).id,user.id);
   assert.equal((await request('auth/logout','POST',undefined,token)).status,200);

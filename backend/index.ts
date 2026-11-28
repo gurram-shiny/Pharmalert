@@ -98,9 +98,18 @@ const server = createServer(async (req,res) => {
     if (section === 'auth' && method === 'POST' && (id === 'register' || id === 'login')) {
       rate('auth:'+req.socket.remoteAddress,15);
       const { email, password, name } = await body(req);
-      const accountEmail = (typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : 'guest@local');
+      const accountEmail = (typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : '');
       const rawPassword = typeof password === 'string' ? password : '';
       let account = db.prepare('select * from accounts where email=?').get(accountEmail) as { id:string; email:string; name:string; password:string } | undefined;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountEmail) || !rawPassword || rawPassword.length>1024) reject(400,'Enter a valid email and password.');
+      if (id === 'login') {
+        const [salt,stored] = account?.password.split(':') ?? ['', ''];
+        const computed = await derive(rawPassword,salt,64) as Buffer;
+        const expected = Buffer.from(stored,'hex');
+        if (!account || computed.length !== expected.length || !timingSafeEqual(computed,expected)) reject(401,'Invalid login credentials.');
+      } else if (account) {
+        reject(409,'Account already registered.');
+      }
       if (!account) {
         const salt = randomBytes(16).toString('hex');
         const key = await derive(rawPassword,salt,64) as Buffer;

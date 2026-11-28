@@ -13,7 +13,7 @@ let driver;
 await mkdir('reports/evidence',{recursive:true});
 const wait=(css)=>driver.wait(until.elementLocated(By.css(css)),10000);
 const text=async(value)=>driver.wait(async()=>{try{return (await driver.findElement(By.css('body')).getText()).includes(value);}catch{return false;}},10000);
-const button=(value)=>driver.wait(until.elementLocated(By.xpath('//button[normalize-space(.)='+JSON.stringify(value)+']')),10000);
+const button=async(value)=>{const el=await driver.wait(until.elementLocated(By.xpath('//button[normalize-space(.)='+JSON.stringify(value)+']')),10000);return driver.wait(until.elementIsEnabled(el),10000);};
 async function exercise(id,description,expected,action){
   try{await action();results.push({id,description,expected,actual:expected,status:'PASS',timestamp:new Date().toISOString(),evidence:'tests/web/selenium.mjs'});}
   catch(error){results.push({id,description,expected,actual:error.message.split('\n')[0],status:'FAIL',timestamp:new Date().toISOString(),evidence:'tests/web/selenium.mjs'});throw error;}
