@@ -1,10 +1,9 @@
-import { ScrollView, Text, Pressable, StyleSheet } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ReactNode } from 'react';
 export function Page({title,subtitle,children}:{title:string;subtitle?:string;children:ReactNode}) {
-  return <SafeAreaView edges={['top','left','right']} style={styles.screen}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-    <Animated.View entering={FadeIn.duration(180)} style={{gap:12}}><Text style={styles.h1}>{title}</Text>{subtitle&&<Text style={styles.muted}>{subtitle}</Text>}{children}</Animated.View>
+  return <SafeAreaView edges={['top','left','right']} style={styles.screen}><ScrollView removeClippedSubviews={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+    <View style={{gap:12}}><Text style={styles.h1}>{title}</Text>{subtitle&&<Text style={styles.muted}>{subtitle}</Text>}{children}</View>
   </ScrollView></SafeAreaView>;
 }
 export function Button({title,onPress,secondary,disabled}:{title:string;onPress:()=>void;secondary?:boolean;disabled?:boolean}) {

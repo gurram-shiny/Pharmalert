@@ -19,7 +19,7 @@ const email=randomUUID()+'@example.test';
 const label=name=>driver.wait(until.elementLocated(By.xpath('//*[@content-desc='+JSON.stringify(name)+' or @text='+JSON.stringify(name)+']')),20000);
 const input=name=>driver.wait(until.elementLocated(By.xpath('//android.widget.EditText[@content-desc='+JSON.stringify(name)+' or @text='+JSON.stringify(name)+']')),20000);
 async function swipe(direction, percent=.75){
-  const view=await driver.findElement(By.className('android.widget.ScrollView'));
+  const view=await driver.findElement(By.xpath('//android.widget.ScrollView[@scrollable="true"]'));
   return driver.executeScript('mobile: scrollGesture',{elementId:await view.getId(),direction,percent,speed:900});
 }
 async function scrollTo(name,query=By.xpath('//*[@content-desc='+JSON.stringify(name)+' or @text='+JSON.stringify(name)+']')){
@@ -36,7 +36,13 @@ async function scrollToTop(){
 }
 async function run(id,description,expected,check){
   try{await check();rows.push({id,description,expected,actual:expected,status:'PASS',timestamp:new Date().toISOString(),evidence:'tests/mobile/appium.mjs'});}
-  catch(error){rows.push({id,description,expected,actual:error.message.split('\n')[0],status:'FAIL',timestamp:new Date().toISOString(),evidence:'tests/mobile/appium.mjs'});console.error(`${id} failed: ${error.message.split('\n')[0]}`);}
+  catch(error){
+    if(!id.startsWith('MP')){
+      await mkdir('reports/evidence',{recursive:true});
+      const xml=await driver.getPageSource().catch(()=>null);
+      if(xml)await writeFile('reports/evidence/appium-'+id+'.xml',xml);
+    }
+    rows.push({id,description,expected,actual:error.message.split('\n')[0],status:'FAIL',timestamp:new Date().toISOString(),evidence:'tests/mobile/appium.mjs'});console.error(`${id} failed: ${error.message.split('\n')[0]}`);}
 }
 try{
   await driver.getSession();
@@ -92,7 +98,7 @@ try{
   await (await label('Records')).click();
   await (await label('Check history')).click();
   const scroll=async direction=>{
-    const view=await driver.findElement(By.className('android.widget.ScrollView'));
+    const view=await driver.findElement(By.xpath('//android.widget.ScrollView[@scrollable="true"]'));
     return driver.executeScript('mobile: scrollGesture',{elementId:await view.getId(),direction,percent:.55,speed:900});
   };
   for(const group of groups){
