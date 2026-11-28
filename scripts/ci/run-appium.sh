@@ -34,6 +34,9 @@ echo "Running Appium on $android_serial"
 timeout 120 bash -c "until adb -s \"$android_serial\" shell pm path android >/dev/null 2>&1; do sleep 2; done"
 adb -s "$android_serial" shell wm dismiss-keyguard || true
 adb -s "$android_serial" shell input keyevent 224 || true
+# Use a representative phone viewport for the catalogue and long evidence reports.
+adb -s "$android_serial" shell wm size 1080x1920
+adb -s "$android_serial" shell wm density 320
 export ANDROID_SERIAL="$android_serial"
 export PHARMALERT_TEST_OFFLINE=1
 export PHARMALERT_APK="$GITHUB_WORKSPACE/apps/app-frontend/android/app/build/outputs/apk/release/app-release.apk"
