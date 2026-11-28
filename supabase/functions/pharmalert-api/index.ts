@@ -1,3 +1,15 @@
+import { clean, RecordValidationError } from '../../../packages/shared/record-validation.ts';
+import { sections, fileTypes, maxFileSize, type Section } from '../../../packages/shared/index.ts';
+
+function prescriptionBytes(file: unknown, mime: unknown) {
+  if (typeof file !== 'string' || file.length > 4*Math.ceil(maxFileSize/3) || !fileTypes.includes(String(mime)))
+    throw new RecordValidationError('Choose a PDF, PNG or JPEG up to 10 MB.');
+  let raw: string;
+  try {raw = atob(file);} catch {throw new RecordValidationError('Invalid file encoding.');}
+  const signature = mime === 'application/pdf' ? '%PDF-' : mime === 'image/png' ? '\x89PNG\r\n\x1a\n' : '\xff\xd8\xff';
+  if (!raw.startsWith(signature) || raw.length > maxFileSize) throw new RecordValidationError('Invalid file or file exceeds 10 MB.');
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -86,39 +98,58 @@ Deno.serve(async (req: Request) => {
       return send(report);
     }
 
-    if(section==="interaction_checks" && ["POST","PATCH"].includes(method))return send({error:"Read-only report"},405);
+    const editable = Object.hasOwn(sections,section);
+    if (!editable && !['interaction_checks','reminder_logs','notifications'].includes(section)) return send({error:'Unknown section.'},404);
     if (method === "GET" && !id) {
       const { data: rows } = await supabase.from("records").select("id,created_at,payload").eq("owner", user.id).eq("section", section).order("created_at", { ascending: false }).throwOnError();
       return send((rows ?? []).map((r: any) => ({ ...r.payload, ...(section==="interaction_checks"?{report:checkInputs(r.payload.inputs)}:{}), id: r.id, created_at: r.created_at })));
     }
 
-    if (method === "POST" && !id) {
-      const payload = await req.json().catch(() => ({}));
-      const { data: row, error } = await supabase.from("records").insert({ owner: user.id, section, payload }).select("id,created_at,payload").single();
-      if (error) return send({ error: error.message }, 400);
-      return send({ ...row.payload, id: row.id, created_at: row.created_at }, 201);
+    const unavailable = () => send({error:'Record unavailable.'},404);
+    const owned = () => supabase.from('records').select('payload,revision').eq('owner',user.id).eq('section',section).eq('id',id).maybeSingle().throwOnError();
+    if (section === 'reminders' && action === 'dose' && method === 'POST') {
+      const body = await req.json();
+      if (!['taken','skipped'].includes(body?.outcome) || typeof body.scheduled_at !== 'string') return send({error:'Invalid dose.'},400);
+      const {data:status} = await supabase.rpc('pharmalert_record_dose',{reminder:id,scheduled:body.scheduled_at,outcome:body.outcome}).throwOnError();
+      if (status === 404) return unavailable();
+      return status === 200 ? send({}) : send({error:status === 409 ? 'This dose was already updated.' : 'Invalid reminder.'},status);
     }
-
-    if (method === "PATCH" && id) {
-      const payload = await req.json().catch(() => ({}));
-      const { data: row, error } = await supabase.from("records").update({ payload }).eq("id", id).eq("owner", user.id).eq("section", section).select("id,created_at,payload").single();
-      if (error || !row) return send({ error: "Record unavailable." }, 404);
-      return send({ ...row.payload, id: row.id, created_at: row.created_at });
+    if (section === 'prescriptions' && action === 'file' && method === 'GET') {
+      const {data} = await supabase.from('records').select('file_base64,mime').eq('id',id).eq('owner',user.id).eq('section',section).maybeSingle().throwOnError();
+      if (!data?.file_base64) return unavailable();
+      return new Response(prescriptionBytes(data.file_base64,data.mime),{headers:{...corsHeaders,'Content-Type':data.mime,'Content-Disposition':'attachment','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'}});
     }
-
-    if (method === "DELETE" && id) {
-      await supabase.from("records").delete().eq("id", id).eq("owner", user.id).eq("section", section).throwOnError();
-      return send({});
+    if (action) return unavailable();
+    if (method === 'DELETE' && id) {
+      const {data} = await supabase.from('records').delete().eq('id',id).eq('owner',user.id).eq('section',section).select('id').maybeSingle().throwOnError();
+      return data ? send({}) : unavailable();
     }
-
-    if (section === "reminders" && id && action === "dose" && method === "POST") {
-      const body = await req.json().catch(() => ({}));
-      await supabase.from("records").insert({ owner: user.id, section: "reminder_logs", payload: { reminder_id: id, outcome: body.outcome, scheduled_at: body.scheduled_at } }).throwOnError();
-      return send({});
+    if (editable && ((method === 'POST' && !id) || (method === 'PATCH' && id))) {
+      const body = await req.json();
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return send({error:'Invalid request.'},400);
+      const existing = id ? (await owned()).data : null;
+      if (id && !existing) return unavailable();
+      const payload = clean(section as Section,{...existing?.payload,...body});
+      if (section === 'reminders') {
+        const {data:medicine} = await supabase.from('records').select('id').eq('id',payload.medicine_id).eq('owner',user.id).eq('section','medicines').maybeSingle().throwOnError();
+        if (!medicine) return send({error:'Select one of your medicines.'},400);
+      }
+      const attachment: {file_base64?:string; mime?:string} = {};
+      if (!id && section === 'prescriptions') {
+        prescriptionBytes(body.file,body.mime);
+        attachment.file_base64 = body.file;
+        attachment.mime = body.mime;
+      }
+      const table = supabase.from('records');
+      const write = existing ? table.update({payload}).eq('owner',user.id).eq('id',id).eq('revision',existing.revision)
+        : table.insert({owner:user.id,section,payload,...attachment});
+      const {data} = await write.select('id,created_at').maybeSingle().throwOnError();
+      return data ? send({...payload,...data},id ? 200 : 201) : send({error:'Record changed. Reload and retry.'},409);
     }
-
+    if (!editable) return send({error:'Read-only record.'},405);
     return send({ error: "Not found." }, 404);
   } catch (err) {
-    return send({ error: (err as Error).message || "The request could not be completed." }, 500);
+    if (err instanceof RecordValidationError || err instanceof SyntaxError) return send({error:err.message},400);
+    return send({error:'The request could not be completed.'},500);
   }
 });

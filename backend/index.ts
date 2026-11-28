@@ -1,3 +1,4 @@
+import {clean, RecordValidationError} from '../packages/shared/record-validation.ts';
 import { createServer, type IncomingMessage } from 'node:http';
 import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
@@ -44,26 +45,6 @@ async function body(req: IncomingMessage, limit = 32_000) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) reject(400,'Invalid request.');
     return value;
   } catch { reject(400,'Invalid request.'); }
-}
-function clean(section: keyof typeof sections, input: Record<string,unknown>) {
-  const result: Record<string,unknown> = {};
-  for (const field of sections[section].fields) {
-    const [key,,format] = field as readonly [string,string,string?];
-    const value = input[key];
-    if (value == null || value === '') { result[key] = null; continue; }
-    if (typeof value !== 'string' || value.length > 2000) reject(400,'Invalid field: '+key);
-    if (format?.startsWith('choice:') && !format.slice(7).split(',').includes(value)) reject(400,'Invalid option.');
-    if (format === 'date' && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0,10) !== value)) reject(400,'Invalid date.');
-    if (format === 'datetime-local' && !Number.isFinite(Date.parse(value))) reject(400,'Invalid time.');
-    result[key] = value.trim();
-  }
-  const required: Partial<Record<keyof typeof sections,string[]>> = {
-    medicines:['name','status'], supplements:['name','category'], alcohol_entries:['name','amount','recorded_at'],
-    reminders:['medicine_id','scheduled_at','repeat'], health_records:['kind','value','recorded_at'],
-  };
-  if (required[section]?.some(key=>!result[key])) reject(400,'Complete the required fields.');
-  if (result.start_date && result.end_date && String(result.start_date) > String(result.end_date)) reject(400,'End date must follow start date.');
-  return result;
 }
 type Stored = { id:string; created_at:string; payload:string; file?:Uint8Array; mime?:string };
 const unpack = (row: Stored) => ({ ...JSON.parse(row.payload), id:row.id, created_at:row.created_at });
@@ -209,7 +190,7 @@ const server = createServer(async (req,res) => {
     }
     if (!(section in sections) || action || (method !== 'POST' && method !== 'PATCH') || (method==='PATCH' && !row) || (method==='POST' && id)) reject(405,'Method not allowed.');
     const input = await body(req,section === 'prescriptions' ? Math.ceil(maxFileSize * 4/3)+16000 : 32000);
-    const values = clean(section as keyof typeof sections,input);
+    const values = clean(section as keyof typeof sections,row ? {...JSON.parse(row.payload),...input} : input);
     if (section === 'reminders' && !lookup(String(values.medicine_id),user.id,'medicines')) reject(400,'Select one of your medicines.');
     if (row) {
       const updated = db.prepare('update records set payload=? where id=? and owner=?').run(JSON.stringify(values),row.id,user.id);
@@ -225,6 +206,7 @@ const server = createServer(async (req,res) => {
     }
     return send(insert(user.id,section,values),201);
   } catch (error) {
+    if (error instanceof RecordValidationError) return send({error:error.message},400);
     if (error instanceof RequestError) return send({error:error.message},error.status);
     return send({error:'The request could not be completed.'},500);
   }
