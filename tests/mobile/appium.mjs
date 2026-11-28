@@ -67,6 +67,7 @@ try{
     await first.clear();
     await first.sendKeys('8-MO');
     await driver.executeScript('mobile: hideKeyboard').catch(()=>{});
+    await (await scrollTo('8-MOP · Historical product only',By.xpath('//*[@content-desc="8-MOP · Historical product only"]'))).click();
     assert.ok(await scrollTo('US catalog Â· Historical product only'));
     await scrollToTop();
     await (await driver.findElements(By.xpath('//*[@content-desc="Supplement"]')))[0].click();
@@ -113,7 +114,10 @@ try{
     const tabLabels=new Set(['Overview','Check','Medicines','Records']);
     for(let page=0;page<100;page++){
       const xml=await driver.getPageSource();
-      const lines=[...xml.matchAll(/<android\.widget\.TextView\b[^>]*?\btext="([^"]+)"/g)].map(match=>match[1]);
+      // A heading at the viewport edge has no visible result yet. Exclude
+      // the tab bar outside the report before pairing adjacent text nodes.
+      const reportXml=xml.split('</android.widget.ScrollView>')[0];
+      const lines=[...reportXml.matchAll(/<android\.widget\.TextView\b[^>]*?\btext="([^"]+)"/g)].map(match=>match[1]);
       for(let i=0;i+1<lines.length;i++){
         if(headings.has(lines[i])&&!headings.has(lines[i+1])&&!tabLabels.has(lines[i+1]))observed.set(lines[i],lines[i+1]);
       }
