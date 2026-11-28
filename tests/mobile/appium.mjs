@@ -20,14 +20,14 @@ const label=name=>driver.wait(until.elementLocated(By.xpath('//*[@content-desc='
 const input=name=>driver.wait(until.elementLocated(By.xpath('//android.widget.EditText[@content-desc='+JSON.stringify(name)+' or @text='+JSON.stringify(name)+']')),20000);
 async function swipe(direction, percent=.75){
   const view=await driver.findElement(By.className('android.widget.ScrollView'));
-  return driver.executeScript('mobile: scrollGesture',{elementId:await view.getId(),direction,percent});
+  return driver.executeScript('mobile: scrollGesture',{elementId:await view.getId(),direction,percent,speed:900});
 }
 async function scrollTo(name,query=By.xpath('//*[@content-desc='+JSON.stringify(name)+' or @text='+JSON.stringify(name)+']')){
-  for(let attempt=0;attempt<100;attempt++){
-    const [found]=await driver.findElements(query);
-    if(found)return found;
-    if(!await swipe('down'))break;
-  }
+  const [visible]=await driver.findElements(query);
+  if(visible)return visible;
+  const match=query.value.includes('android.widget.EditText')?'description':'text';
+  const selector='new UiScrollable(new UiSelector().scrollable(true)).setMaxSearchSwipes(120).scrollIntoView(new UiSelector().'+match+'('+JSON.stringify(name)+'))';
+  await driver.findElements({using:'-android uiautomator',value:selector});
   return driver.wait(until.elementLocated(query),10000);
 }
 async function scrollToTop(){
@@ -58,13 +58,14 @@ try{
     await (await driver.findElements(By.xpath('//*[@content-desc="Supplement"]')))[0].click();
     await (await driver.findElements(By.xpath('//*[@content-desc="Medicine"]')))[0].click();
     const first=await input('Substance 1');
-    await first.sendKeys('8-MOP');
+    await first.clear();
+    await first.sendKeys('8-MO');
     await driver.executeScript('mobile: hideKeyboard').catch(()=>{});
     assert.ok(await scrollTo('US catalog · Historical product only'));
     await scrollToTop();
     await (await driver.findElements(By.xpath('//*[@content-desc="Supplement"]')))[0].click();
     const supplement=await input('Substance 1');
-    assert.equal(await supplement.getAttribute('hint'),'Search supplement labels');
+    assert.ok(await driver.findElement(By.xpath('//android.widget.EditText[@content-desc="Substance 1" and @hint="Search supplement labels"]')));
     await supplement.sendKeys('#14 LB-CLN');
     await driver.executeScript('mobile: hideKeyboard').catch(()=>{});
     assert.ok(await scrollTo('US catalog · Historical product only'));
@@ -77,7 +78,7 @@ try{
     assert.ok(await scrollTo('Alcohol + Gemfibrozil'));
     await scrollToTop();
     await (await driver.findElements(By.xpath('//*[@content-desc="Medicine"]')))[0].click();
-    assert.equal(await (await input('Substance 1')).getAttribute('hint'),'Search brand or ingredient');
+    assert.ok(await driver.findElement(By.xpath('//android.widget.EditText[@content-desc="Substance 1" and @hint="Search brand or ingredient"]')));
   });
   // Generate genuine saved reports through the same local API used by the app.
   const api=process.env.PHARMALERT_API_URL??'http://127.0.0.1:8787/api';
@@ -92,7 +93,7 @@ try{
   await (await label('Check history')).click();
   const scroll=async direction=>{
     const view=await driver.findElement(By.className('android.widget.ScrollView'));
-    return driver.executeScript('mobile: scrollGesture',{elementId:await view.getId(),direction,percent:.65});
+    return driver.executeScript('mobile: scrollGesture',{elementId:await view.getId(),direction,percent:.55,speed:900});
   };
   for(const group of groups){
     for(let i=0;i<80 && !(await driver.findElements(By.xpath('//android.widget.EditText[@content-desc="Search history"]'))).length;i++)await scroll('up');
