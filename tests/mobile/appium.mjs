@@ -67,7 +67,7 @@ try{
     await first.clear();
     await first.sendKeys('8-MO');
     await driver.executeScript('mobile: hideKeyboard').catch(()=>{});
-    await (await scrollTo('8-MOP · Historical product only',By.xpath('//*[@content-desc="8-MOP · Historical product only"]'))).click();
+    await (await scrollTo('8-MOP \u00b7 Historical product only',By.xpath('//*[@content-desc="8-MOP \u00b7 Historical product only"]'))).click();
     assert.ok(await scrollTo('US catalog Â· Historical product only'));
     await scrollToTop();
     await (await driver.findElements(By.xpath('//*[@content-desc="Supplement"]')))[0].click();
